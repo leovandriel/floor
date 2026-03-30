@@ -1,3 +1,3 @@
-import Setup from './setup'
+import App from "./app";
 
-Setup.init()
+App.init();
