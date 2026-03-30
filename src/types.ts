@@ -29,5 +29,12 @@ export interface Segment {
 	end: Point;
 }
 
+export interface RenderStats {
+	tiles: number;
+	branches: number;
+	avatars: number;
+	maxDepth: number;
+}
+
 export type MouseAction = "down" | "up" | "move" | "drag" | "out";
 export type RenderType = "none" | "wall" | "corner";

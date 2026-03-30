@@ -65,12 +65,12 @@ npm run typecheck
 
 ### Navigation Tuning
 
-- `=` or numpad `+`: decrease warp
-- `-` or numpad `-`: increase warp
-- `0` or numpad `0`: zoom in
-- `9` or numpad `9`: zoom out
-- `8` or numpad `8`: increase local scene scale
-- `7` or numpad `7`: decrease local scene scale
+- `0`: decrease warp
+- `9`: increase warp
+- `8`: zoom in
+- `7`: zoom out
+- `6`: increase local scene scale
+- `5`: decrease local scene scale
 
 `warp`, `zoom`, and `scene scale` affect slightly different parts of the rendering:
 
@@ -80,11 +80,9 @@ npm run typecheck
 
 The movement model is intentionally non-Euclidean, so turning and wrapping may feel unusual at first.
 
-### Debug Toggles
+### Debug Toggle
 
-- `V`: show tile outlines more clearly
-- `C`: highlight the current tile
-- `X`: show the avatar in recursively rendered copies of the scene
+- `X`: toggle debug overlays
 
 ## License
 

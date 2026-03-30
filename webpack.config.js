@@ -1,4 +1,5 @@
 const path = require("node:path");
+const webpack = require("webpack");
 
 const distPath = path.resolve(__dirname, "dist");
 const publicPath = path.resolve(__dirname, "public");
@@ -14,6 +15,8 @@ module.exports = (_, argv = {}) => {
 			type: "filesystem",
 		},
 		devServer: {
+			historyApiFallback: true,
+			port: 8080,
 			static: {
 				directory: publicPath,
 			},
@@ -34,5 +37,10 @@ module.exports = (_, argv = {}) => {
 			filename: "bundle.js",
 			path: distPath,
 		},
+		plugins: [
+			new webpack.DefinePlugin({
+				__DEV__: JSON.stringify(!isProduction),
+			}),
+		],
 	};
 };

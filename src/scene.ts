@@ -7,17 +7,10 @@ import type {
 	MouseAction,
 	Plan,
 	Point,
+	RenderStats,
 	RenderType,
 	Segment,
 } from "./types";
-
-interface BranchFrame {
-	level: number;
-	index: number;
-	offset: number;
-	edge: Segment;
-	bounds: Segment;
-}
 
 interface ShapeOffset {
 	shape: Point;
@@ -110,9 +103,11 @@ export default class Scene {
 		);
 	}
 
-	renderAvatar(_state: RenderState, a: Point): void {
-		this.canvas.setColor(this.avatarColor);
-		this.canvas.drawCircle(a, this.avatarRadius, true);
+	renderAvatar(_state: RenderState, a: Point, faded = false): void {
+		this.canvas.setColor(
+			faded ? withAlpha(this.avatarColor, 0.35) : this.avatarColor,
+		);
+		this.canvas.drawCircle(a, this.avatarRadius, !faded);
 	}
 
 	renderMouse(state: RenderState): void {
@@ -132,9 +127,13 @@ export default class Scene {
 		const { start: clipStart, end: clipEnd } = bounds;
 		const visibleStart = math.intersectOrigin(wallStart, wallEnd, clipStart);
 		const visibleEnd = math.intersectOrigin(wallStart, wallEnd, clipEnd);
-		state.wall(visibleStart, visibleEnd);
+		if (state.mouse) {
+			state.wall(visibleStart, visibleEnd);
+		}
 		if (math.isClose(visibleStart, wallStart)) {
-			state.corner(wallStart);
+			if (state.mouse) {
+				state.corner(wallStart);
+			}
 			const f =
 				this.canvas.factor < 1
 					? this.canvas.range * 10
@@ -143,7 +142,9 @@ export default class Scene {
 			this.canvas.drawLine(wallStart, point(wallStart.x * f, wallStart.y * f));
 		}
 		if (math.isClose(visibleEnd, wallEnd)) {
-			state.corner(wallEnd);
+			if (state.mouse) {
+				state.corner(wallEnd);
+			}
 			const f =
 				this.canvas.factor < 1
 					? this.canvas.range * 10
@@ -163,15 +164,21 @@ export default class Scene {
 	renderTile(
 		_state: RenderState,
 		triangle: [Point, Point, Point],
+		stats: RenderStats,
 		clip?: Segment,
 		highlight?: boolean,
 	): void {
+		stats.tiles += 1;
 		const [vertexA, vertexB, vertexC] = triangle;
-		this.canvas.setColor(highlight ? this.highlightColor : this.tileColor);
 		if (!clip) {
+			this.canvas.setColor(this.tileColor);
 			this.canvas.drawPath([vertexA, vertexB, vertexC], true);
+			if (highlight) {
+				this.canvas.setColor(withAlpha(this.highlightColor, 0.45));
+				this.canvas.drawPath([vertexA, vertexB, vertexC], true);
+			}
 			if (this.showTile) {
-				this.canvas.setColor(withAlpha(this.highlightColor, 0.5));
+				this.canvas.setColor(withAlpha(this.highlightColor, 0.25));
 			}
 			this.canvas.drawPath([vertexA, vertexB, vertexC], false);
 			return;
@@ -196,74 +203,98 @@ export default class Scene {
 			path.push(math.intersectOrigin(vertexB, vertexA, clipEnd));
 		}
 		path.push(math.intersectOrigin(vertexC, vertexA, clipEnd));
+		this.canvas.setColor(this.tileColor);
 		this.canvas.drawPath(path, true);
-		if (this.showTile) {
-			this.canvas.setColor(withAlpha(this.highlightColor, 0.5));
+		if (highlight) {
+			this.canvas.setColor(withAlpha(this.highlightColor, 0.45));
+			this.canvas.drawPath(path, true);
 		}
 		this.canvas.drawPath(path, false);
+		if (this.showTile) {
+			const clippedBaseStart = math.intersectOrigin(
+				vertexA,
+				vertexC,
+				clipStart,
+			);
+			const clippedBaseEnd = math.intersectOrigin(vertexC, vertexA, clipEnd);
+			this.canvas.setColor(withAlpha(this.highlightColor, 0.25));
+			this.canvas.drawLine(clippedBaseEnd, clippedBaseStart);
+		}
 	}
 
-	renderBranch(state: RenderState, frame: BranchFrame): void {
-		const { level, index, offset, edge, bounds } = frame;
-		const { start: branchStart, end: branchEnd } = edge;
-		const { start: clipStart, end: clipEnd } = bounds;
+	renderBranch(
+		state: RenderState,
+		stats: RenderStats,
+		depth: number,
+		index: number,
+		offset: number,
+		branchStart: Point,
+		branchEnd: Point,
+		clipStart: Point,
+		clipEnd: Point,
+		avatars: Point[],
+		walls: Segment[],
+		wallBounds: Segment[],
+	): void {
+		stats.branches += 1;
+		if (depth > stats.maxDepth) {
+			stats.maxDepth = depth;
+		}
 		if (math.isClockwise(clipEnd, clipStart)) {
 			return;
 		}
-		if (this.isSegmentOutsideViewport(edge)) {
+		if (this.isSegmentOutsideViewport({ start: branchStart, end: branchEnd })) {
 			return;
 		}
 		if (index < 0) {
-			if (level === 2) {
-				this.renderWall(state, edge, bounds);
-			}
+			walls.push({ start: branchStart, end: branchEnd });
+			wallBounds.push({ start: clipStart, end: clipEnd });
 			return;
 		}
 		const { shape, sides } = this.plan.tiles[index];
 		const shiftedShape = this.shiftShape(shape, offset);
 		const branchCorner = this.shiftCorner(branchStart, branchEnd, shiftedShape);
-		if (level === 0) {
-			this.renderTile(state, [branchStart, branchCorner, branchEnd], {
-				start: clipStart,
-				end: clipEnd,
-			});
-		}
-		if (level === 1 && this.showSelf && index === this.current) {
+		this.renderTile(state, [branchStart, branchCorner, branchEnd], stats, {
+			start: clipStart,
+			end: clipEnd,
+		});
+		if (this.showSelf && index === this.current) {
 			const shiftedPosition = this.shiftPosition(
 				{ shape, offset },
 				this.position,
 			);
-			this.renderAvatar(
-				state,
-				this.shiftCorner(branchStart, branchEnd, shiftedPosition),
-			);
+			avatars.push(this.shiftCorner(branchStart, branchEnd, shiftedPosition));
 		}
 		const leftSide = sides[(offset + 1) % 3];
 		const rightSide = sides[(offset + 2) % 3];
-		this.renderBranch(state, {
-			level,
-			index: leftSide.index,
-			offset: leftSide.offset,
-			edge: { start: branchStart, end: branchCorner },
-			bounds: {
-				start: math.isClockwise(branchStart, clipStart)
-					? clipStart
-					: branchStart,
-				end: math.isClockwise(clipEnd, branchCorner) ? clipEnd : branchCorner,
-			},
-		});
-		this.renderBranch(state, {
-			level,
-			index: rightSide.index,
-			offset: rightSide.offset,
-			edge: { start: branchCorner, end: branchEnd },
-			bounds: {
-				start: math.isClockwise(branchCorner, clipStart)
-					? clipStart
-					: branchCorner,
-				end: math.isClockwise(clipEnd, branchEnd) ? clipEnd : branchEnd,
-			},
-		});
+		this.renderBranch(
+			state,
+			stats,
+			depth + 1,
+			leftSide.index,
+			leftSide.offset,
+			branchStart,
+			branchCorner,
+			math.isClockwise(branchStart, clipStart) ? clipStart : branchStart,
+			math.isClockwise(clipEnd, branchCorner) ? clipEnd : branchCorner,
+			avatars,
+			walls,
+			wallBounds,
+		);
+		this.renderBranch(
+			state,
+			stats,
+			depth + 1,
+			rightSide.index,
+			rightSide.offset,
+			branchCorner,
+			branchEnd,
+			math.isClockwise(branchCorner, clipStart) ? clipStart : branchCorner,
+			math.isClockwise(clipEnd, branchEnd) ? clipEnd : branchEnd,
+			avatars,
+			walls,
+			wallBounds,
+		);
 	}
 
 	getCorners(shape: Point): [Point, Point, Point] {
@@ -285,36 +316,64 @@ export default class Scene {
 		return [leftCorner, rightCorner, topCorner];
 	}
 
-	renderTrunc(state: RenderState, level: number): void {
+	renderTrunc(
+		state: RenderState,
+		stats: RenderStats,
+		avatars: Point[],
+		walls: Segment[],
+		wallBounds: Segment[],
+	): void {
 		const { shape, sides } = this.plan.tiles[this.current];
 		const corners = this.getCorners(shape);
-		this.renderTile(state, corners, undefined, this.showCurrent);
+		this.renderTile(state, corners, stats, undefined, this.showCurrent);
 		for (let sideIndex = 0; sideIndex < 3; sideIndex++) {
 			const edgeStart = corners[(4 - sideIndex) % 3];
 			const edgeEnd = corners[(3 - sideIndex) % 3];
-			this.renderBranch(state, {
-				level,
-				index: sides[sideIndex].index,
-				offset: sides[sideIndex].offset,
-				edge: { start: edgeStart, end: edgeEnd },
-				bounds: { start: edgeStart, end: edgeEnd },
-			});
+			this.renderBranch(
+				state,
+				stats,
+				1,
+				sides[sideIndex].index,
+				sides[sideIndex].offset,
+				edgeStart,
+				edgeEnd,
+				edgeStart,
+				edgeEnd,
+				avatars,
+				walls,
+				wallBounds,
+			);
 		}
 	}
 
-	render(_action?: MouseAction): void {
+	render(_action?: MouseAction): RenderStats {
 		const state = new RenderState(
 			this.canvas.getMouse(),
 			this.scale / this.canvas.range / 10,
 		);
+		const stats: RenderStats = {
+			tiles: 0,
+			branches: 0,
+			avatars: 0,
+			maxDepth: 0,
+		};
+		const avatars: Point[] = [];
+		const walls: Segment[] = [];
+		const wallBounds: Segment[] = [];
 		this.canvas.setWidth(4);
 		this.renderBackground(state);
-		for (let level = 0; level < 3; level++) {
-			this.renderTrunc(state, level);
+		this.renderTrunc(state, stats, avatars, walls, wallBounds);
+		stats.avatars = avatars.length;
+		for (const avatar of avatars) {
+			this.renderAvatar(state, avatar, true);
+		}
+		for (let i = 0; i < walls.length; i++) {
+			this.renderWall(state, walls[i], wallBounds[i]);
 		}
 		this.renderAvatar(state, point(0, 0));
 		this.canvas.setWidth(2);
 		this.renderMouse(state);
+		return stats;
 	}
 
 	shiftPosition({ shape, offset }: ShapeOffset, position: Point): Point {
@@ -357,18 +416,6 @@ export default class Scene {
 		return position;
 	}
 
-	shiftRotation({ shape, offset }: ShapeOffset): number {
-		switch (offset) {
-			case 0:
-				return 0;
-			case 1:
-				return math.atan2Turns(shape.y, shape.x);
-			case 2:
-				return math.atan2Turns(-shape.y, 1 - shape.x);
-		}
-		return 0;
-	}
-
 	shiftScale({ shape, offset }: ShapeOffset): number {
 		switch (offset) {
 			case 0:
@@ -379,6 +426,27 @@ export default class Scene {
 				return math.size(point(1 - shape.x, shape.y));
 		}
 		return 1;
+	}
+
+	transitionRotation(
+		position: Point,
+		rotation: number,
+		from: ShapeOffset,
+		to: ShapeOffset,
+	): number {
+		// Revisit this probe step if we replace the finite-difference estimate
+		// with an analytic direction transform across the seam.
+		const delta = 1e-6;
+		const forwardPoint = point(
+			position.x + math.sinTurns(rotation) * delta,
+			position.y + math.cosTurns(rotation) * delta,
+		);
+		const shiftedPosition = this.handleTransition(position, from, to);
+		const shiftedForward = this.handleTransition(forwardPoint, from, to);
+		return math.atan2Turns(
+			shiftedForward.x - shiftedPosition.x,
+			shiftedForward.y - shiftedPosition.y,
+		);
 	}
 
 	handleTransition(position: Point, from: ShapeOffset, to: ShapeOffset): Point {
@@ -432,10 +500,14 @@ export default class Scene {
 						const from = { shape, offset: sideIndex };
 						const to = { shape: nextShape, offset };
 						this.position = math.interpolate(this.position, next, movePosition);
+						this.rotation = this.transitionRotation(
+							this.position,
+							this.rotation,
+							from,
+							to,
+						);
 						this.position = this.handleTransition(this.position, from, to);
 						const shiftedNext = this.handleTransition(next, from, to);
-						this.rotation += this.shiftRotation(from) - this.shiftRotation(to);
-						if (sideIndex === offset) this.rotation += 0.5;
 						this.scale *= this.shiftScale(from) / this.shiftScale(to);
 						this.current = index;
 						this.handlePhysics(shiftedNext, wallCount);

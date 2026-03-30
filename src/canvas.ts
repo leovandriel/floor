@@ -57,6 +57,15 @@ export default class Canvas {
 		return this.backgroundValue;
 	}
 
+	set factor(factor: number) {
+		this.factorValue = factor;
+		this.cache();
+	}
+
+	set range(range: number) {
+		this.rangeValue = range;
+	}
+
 	zoom(factor: number): void {
 		this.factorValue *= factor;
 		this.cache();
@@ -143,8 +152,8 @@ export default class Canvas {
 	drawPath(path: Point[], fill?: boolean): void {
 		this.context.beginPath();
 		this.context.moveTo(...this.transform(path[0]));
-		for (const v of path.slice(1)) {
-			this.context.lineTo(...this.transform(v));
+		for (let i = 1; i < path.length; i++) {
+			this.context.lineTo(...this.transform(path[i]));
 		}
 		this.context.closePath();
 		if (fill) {

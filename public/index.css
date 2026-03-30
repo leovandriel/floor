@@ -5,6 +5,227 @@ body {
 	margin: 0;
 }
 
+body {
+	overflow: hidden;
+	font:
+		12px / 1.35 system-ui,
+		sans-serif;
+}
+
 canvas {
 	display: block;
+}
+
+.controls {
+	position: fixed;
+	top: 12px;
+	right: 12px;
+	z-index: 10;
+	width: min(280px, calc(100vw - 24px));
+	padding: 10px;
+	border: 1px solid rgb(0 0 0 / 12%);
+	border-radius: 10px;
+	background: rgb(255 255 255 / 84%);
+	box-shadow: 0 8px 24px rgb(0 0 0 / 10%);
+	backdrop-filter: blur(10px);
+}
+
+.controls__group {
+	margin-top: 10px;
+	padding-top: 10px;
+	border-top: 1px solid rgb(0 0 0 / 10%);
+}
+
+.controls__row {
+	display: grid;
+	grid-template-columns: 78px 1fr;
+	gap: 8px;
+	align-items: center;
+}
+
+.controls__row--header {
+	grid-template-columns: 38px 1fr auto;
+}
+
+.controls__row + .controls__row {
+	margin-top: 6px;
+}
+
+.controls__label {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	white-space: nowrap;
+	color: rgb(0 0 0 / 72%);
+	font-weight: 600;
+}
+
+.controls__select,
+.controls__field input,
+.controls button {
+	border: 1px solid rgb(0 0 0 / 14%);
+	border-radius: 7px;
+	background: rgb(255 255 255 / 96%);
+	font: inherit;
+}
+
+.controls__select,
+.controls__field input {
+	width: 100%;
+	min-width: 0;
+	padding: 5px 8px;
+	box-sizing: border-box;
+}
+
+.controls__field input {
+	font-family:
+		ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Monaco, Consolas,
+		"Liberation Mono", monospace;
+}
+
+.controls__buttons,
+.controls__field {
+	display: grid;
+	gap: 4px;
+}
+
+.controls__buttons {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.controls__buttons--move {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.controls button {
+	padding: 5px 0;
+	cursor: pointer;
+}
+
+.controls__reset {
+	width: auto;
+	padding-inline: 12px;
+}
+
+.controls__collapse {
+	min-width: 28px;
+	padding-inline: 6px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.controls__collapse-icon {
+	font-size: 14px;
+	line-height: 1;
+	color: rgb(0 0 0 / 78%);
+}
+
+.controls--collapsed .controls__collapse-icon {
+	font-size: 13px;
+}
+
+.controls kbd {
+	display: inline-block;
+	padding: 1px 4px;
+	border: 1px solid rgb(0 0 0 / 14%);
+	border-radius: 4px;
+	background: rgb(255 255 255 / 88%);
+	font: inherit;
+	font-size: 0.9em;
+	line-height: 1.1;
+}
+
+.controls button:hover,
+.controls button:focus-visible,
+.controls__select:focus-visible,
+.controls__field input:focus-visible,
+.controls__toggles input:focus-visible {
+	outline: 2px solid rgb(31 105 255 / 25%);
+	outline-offset: 1px;
+}
+
+.controls__toggles {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px 12px;
+}
+
+.controls__toggles label,
+.controls__footer label {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+}
+
+.controls input[type="checkbox"] {
+	accent-color: rgb(130 130 130);
+}
+
+.controls__footer {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.controls__stats {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 6px 12px;
+}
+
+.controls__stat {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 8px;
+	color: rgb(0 0 0 / 72%);
+	font-weight: 600;
+}
+
+.controls__stat input {
+	width: 56px;
+	min-width: 0;
+	padding: 2px 6px;
+	box-sizing: border-box;
+	border: 1px solid rgb(0 0 0 / 14%);
+	border-radius: 7px;
+	background: rgb(255 255 255 / 70%);
+	font: inherit;
+	font-family:
+		ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Monaco, Consolas,
+		"Liberation Mono", monospace;
+	font-weight: 500;
+	color: rgb(0 0 0 / 92%);
+	pointer-events: none;
+}
+
+.controls__footer .controls__reset {
+	margin-left: auto;
+	min-width: 96px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+}
+
+.controls--collapsed .controls__group {
+	display: none;
+}
+
+@media (max-width: 700px) {
+	.controls {
+		width: min(320px, calc(100vw - 16px));
+		top: 8px;
+		right: 8px;
+		padding: 8px;
+	}
+
+	.controls__row {
+		grid-template-columns: 74px 1fr;
+	}
+
+	.controls__row--header {
+		grid-template-columns: 34px 1fr auto;
+	}
 }
