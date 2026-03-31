@@ -26,6 +26,7 @@ export interface Tile {
 }
 
 export interface Plan {
+	slug: string;
 	tiles: Tile[];
 }
 
@@ -41,6 +42,7 @@ export interface RenderStats {
 	branches: number;
 	avatars: number;
 	maxDepth: number;
+	renderDuration: number;
 }
 
 export type MouseAction = "down" | "up" | "move" | "drag" | "out";

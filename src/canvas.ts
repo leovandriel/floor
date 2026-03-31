@@ -33,13 +33,8 @@ export default class Canvas {
 
 	private gradientCache: GradientCache = {};
 
-	constructor(
-		context: CanvasRenderingContext2D,
-		size: Point,
-		background: Color,
-	) {
+	constructor(context: CanvasRenderingContext2D, background: Color) {
 		this.context = context;
-		this.sizeValue = size;
 		this.backgroundValue = background;
 		this.cache();
 	}
@@ -73,6 +68,17 @@ export default class Canvas {
 
 	warp(range: number): void {
 		this.rangeValue *= range;
+	}
+
+	resizeToWindow(): void {
+		const size = point(window.innerWidth, window.innerHeight);
+		this.context.canvas.width = size.x * 2;
+		this.context.canvas.height = size.y * 2;
+		this.context.canvas.style.width = `${size.x}px`;
+		this.context.canvas.style.height = `${size.y}px`;
+		this.context.setTransform(2, 0, 0, 2, 0, 0);
+		this.sizeValue = size;
+		this.cache();
 	}
 
 	setSize(size: Point): void {

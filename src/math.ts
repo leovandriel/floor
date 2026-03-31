@@ -4,6 +4,10 @@ export function point(x: number, y: number): Point {
 	return { x, y };
 }
 
+export function clamp(value: number, min: number, max: number): number {
+	return Math.min(Math.max(value, min), max);
+}
+
 export const epsilon = 1e-5;
 
 export function size(v: Point): number {
