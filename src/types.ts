@@ -18,6 +18,11 @@ export interface Side {
 export interface Tile {
 	shape: Point;
 	sides: [Side, Side, Side];
+	cornerWalls?: [
+		CornerWall | undefined,
+		CornerWall | undefined,
+		CornerWall | undefined,
+	];
 }
 
 export interface Plan {
@@ -28,6 +33,8 @@ export interface Segment {
 	start: Point;
 	end: Point;
 }
+
+export type CornerWall = [Point | undefined, Point | undefined];
 
 export interface RenderStats {
 	tiles: number;

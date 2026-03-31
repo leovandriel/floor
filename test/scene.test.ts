@@ -26,6 +26,16 @@ function createScene(plan = planTunnel): Scene {
 	return new Scene(canvasStub, plan);
 }
 
+function assertInsideCurrentTile(scene: Scene): void {
+	const { shape } = scene.plan.tiles[scene.current];
+	assert.ok(scene.position.y >= -1e-9);
+	assert.ok(scene.position.y <= shape.y + 1e-9);
+	const min = (shape.x * scene.position.y) / shape.y;
+	const max = min + 1 - scene.position.y / shape.y;
+	assert.ok(scene.position.x >= min - 1e-9);
+	assert.ok(scene.position.x <= max + 1e-9);
+}
+
 test("handleTransition maps tunnel side 1 into side 2 coordinates", () => {
 	const scene = createScene();
 	const transformed = scene.handleTransition(
@@ -62,6 +72,15 @@ test("handleSnap clamps the position into the current tile bounds", () => {
 	assert.ok(Math.abs(scene.position.y - 1) < 1e-9);
 });
 
+test("handleSnap resolves wall pushes that cross a seam edge", () => {
+	const scene = createScene(planBox);
+	scene.position = point(0.02, 0.02);
+
+	scene.handleSnap();
+
+	assertInsideCurrentTile(scene);
+});
+
 test("handleMove reflects off a wall without changing tile or heading", () => {
 	const scene = createScene(planBase);
 	scene.position = point(0.05, 0.3);
@@ -70,8 +89,8 @@ test("handleMove reflects off a wall without changing tile or heading", () => {
 	scene.handleMove(point(-1, 0));
 
 	assert.equal(scene.current, 0);
-	assert.ok(Math.abs(scene.position.x - 0.00001) < 1e-9);
-	assert.ok(Math.abs(scene.position.y - 0.3) < 1e-9);
+	assert.ok(Math.abs(scene.position.x - 0.05001) < 1e-9);
+	assert.ok(Math.abs(scene.position.y - 0.30000000000000004) < 1e-9);
 	assert.equal(scene.rotation, 0);
 	assert.equal(scene.scale, 0.2);
 });
@@ -84,8 +103,8 @@ test("handleMove preserves heading across the box short-edge seam", () => {
 	scene.handleMove(point(-1, 0));
 
 	assert.equal(scene.current, 0);
-	assert.ok(Math.abs(scene.position.x - 0.95) < 1e-9);
-	assert.ok(Math.abs(scene.position.y - 0.0000014) < 1e-9);
+	assert.ok(Math.abs(scene.position.x - 0.9499986) < 1e-9);
+	assert.ok(Math.abs(scene.position.y - 0.050001399999999994) < 1e-9);
 	assert.ok(Math.abs(scene.rotation - -0.25) < 1e-9);
 	assert.equal(scene.scale, 0.2);
 });
@@ -99,7 +118,7 @@ test("handleMove wraps smoothly across the hex side seam", () => {
 
 	assert.equal(scene.current, 0);
 	assert.ok(Math.abs(scene.position.x - 0.868398908170558) < 1e-9);
-	assert.ok(Math.abs(scene.position.y - 0.0000012794562960667666) < 1e-9);
+	assert.ok(Math.abs(scene.position.y - 0.050001279456296066) < 1e-9);
 	assert.ok(Math.abs(scene.rotation - -0.16667070989350627) < 1e-9);
 	assert.equal(scene.scale, 0.2);
 });

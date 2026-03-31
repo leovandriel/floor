@@ -199,6 +199,15 @@ export default class Canvas {
 		}
 	}
 
+	drawText(a: Point, text: string): void {
+		this.context.save();
+		this.context.font = `${Math.max(this.scaleValue / 54, 8)}px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace`;
+		this.context.textAlign = "center";
+		this.context.textBaseline = "middle";
+		this.context.fillText(text, ...this.transform(a));
+		this.context.restore();
+	}
+
 	drawRect(p: Point, q: Point): void {
 		this.context.fillRect(p.x, p.y, q.x, q.y);
 	}

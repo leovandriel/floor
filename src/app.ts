@@ -166,7 +166,11 @@ function serializeScene(scene: Scene): UrlState {
 		scale: scene.scale,
 		factor: scene.canvas.factor,
 		range: scene.canvas.range,
-		debug: scene.showTile && scene.showCurrent && scene.showSelf,
+		debug:
+			scene.showTile &&
+			scene.showCurrent &&
+			scene.showSelf &&
+			scene.showCornerWall,
 	};
 }
 
@@ -388,8 +392,7 @@ export default class App {
 	createScene(context: CanvasRenderingContext2D): Scene {
 		const size = this.resizeCanvas(context);
 		const canvas2 = new Canvas(context, size, color(0.8, 0.8, 0.8));
-		const scene = new Scene(canvas2, this.plan);
-		return scene;
+		return new Scene(canvas2, this.plan);
 	}
 
 	attachHandlers(): void {
@@ -680,7 +683,8 @@ export default class App {
 		const debug =
 			previousScene.showTile &&
 			previousScene.showCurrent &&
-			previousScene.showSelf;
+			previousScene.showSelf &&
+			previousScene.showCornerWall;
 		const nextPlan = getPlanBySlug(slug);
 		if (!nextPlan) {
 			this.syncControls();
@@ -782,7 +786,10 @@ export default class App {
 		controls.factorInput.value = formatStateNumber(scene.canvas.factor);
 		controls.rangeInput.value = formatStateNumber(scene.canvas.range);
 		controls.debugInput.checked =
-			scene.showTile && scene.showCurrent && scene.showSelf;
+			scene.showTile &&
+			scene.showCurrent &&
+			scene.showSelf &&
+			scene.showCornerWall;
 		controls.tilesOutput.value = String(this.lastRenderStats.tiles);
 		controls.depthOutput.value = String(this.lastRenderStats.maxDepth);
 		controls.branchesOutput.value = String(this.lastRenderStats.branches);
@@ -908,10 +915,16 @@ export default class App {
 		scene.showTile = value;
 		scene.showCurrent = value;
 		scene.showSelf = value;
+		scene.showCornerWall = value;
 	}
 
 	private toggleDebug(scene: Scene): void {
-		const nextValue = !(scene.showTile && scene.showCurrent && scene.showSelf);
+		const nextValue = !(
+			scene.showTile &&
+			scene.showCurrent &&
+			scene.showSelf &&
+			scene.showCornerWall
+		);
 		this.setDebug(scene, nextValue);
 	}
 
