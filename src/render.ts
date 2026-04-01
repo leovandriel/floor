@@ -1,10 +1,13 @@
 import type Canvas from "./canvas";
-import { color, withAlpha } from "./canvas";
+import { withAlpha } from "./canvas";
+import { shiftPosition, shiftShape } from "./geometry";
 import * as math from "./math";
-import { epsilon, point } from "./math";
+import { epsilon } from "./math";
 import type Physics from "./physics";
-import { getTileCorners, shiftPosition } from "./physics";
+import { ensureCornerWalls } from "./plan";
+import { getAdjacentSides, getSideCorners, getTileCorners } from "./topology";
 import type { Color, Point, RenderStats, RenderType, Segment } from "./types";
+import { color, point } from "./types";
 
 class RenderTrace {
 	distanceSq: number = -1;
@@ -40,22 +43,6 @@ class RenderTrace {
 			this.points = points;
 		}
 	}
-}
-
-function shiftShape(shape: Point, offset: number): Point {
-	switch (offset) {
-		case 0:
-			return shape;
-		case 1: {
-			const d = shape.x * shape.x + shape.y * shape.y;
-			return point(1 - shape.x / d, shape.y / d);
-		}
-		case 2: {
-			const e = (1 - shape.x) * (1 - shape.x) + shape.y * shape.y;
-			return point((1 - shape.x) / e, shape.y / e);
-		}
-	}
-	return shape;
 }
 
 function shiftCorner(p: Point, q: Point, a: Point): Point {
@@ -149,11 +136,11 @@ export default class Renderer {
 	}
 
 	renderCornerWalls(): void {
-		const { shape, cornerWalls } =
-			this.physics.plan.tiles[this.physics.current];
-		if (!cornerWalls) {
-			return;
-		}
+		const { shape } = this.physics.plan.get(this.physics.currentTileId);
+		const cornerWalls = ensureCornerWalls(
+			this.physics.plan,
+			this.physics.currentTileId,
+		);
 		const corners = this.getCorners(shape);
 		const triangle: [Point, Point, Point] = corners;
 		const [vertexA, _vertexB, vertexC] = triangle;
@@ -169,7 +156,7 @@ export default class Renderer {
 				vertexC,
 				localCorners[cornerIndex],
 			);
-			for (const direction of cornerWall) {
+			for (const direction of [cornerWall.left, cornerWall.right]) {
 				if (!direction) {
 					continue;
 				}
@@ -238,13 +225,13 @@ export default class Renderer {
 
 	renderBackground(): void {
 		this.canvas.setColor(this.canvas.background);
-		this.canvas.drawRect(point(0, 0), this.canvas.size);
+		this.canvas.drawRect(point(0.0, 0.0), this.canvas.size);
 	}
 
 	renderTile(
 		triangle: [Point, Point, Point],
 		stats: RenderStats,
-		index: number,
+		tileId: number,
 		clip?: Segment,
 		highlight?: boolean,
 	): void {
@@ -264,7 +251,7 @@ export default class Renderer {
 			}
 			if (this.showTile) {
 				this.canvas.setColor(withAlpha(this.wallColor, 0.45));
-				this.canvas.drawText(triangleCentroid, String(index));
+				this.canvas.drawText(triangleCentroid, String(tileId));
 			}
 			if (this.showTile) {
 				this.canvas.setColor(withAlpha(this.highlightColor, 0.25));
@@ -301,7 +288,7 @@ export default class Renderer {
 		this.canvas.drawPath(path, false);
 		if (this.showTile && isPointInPolygon(triangleCentroid, path)) {
 			this.canvas.setColor(withAlpha(this.wallColor, 0.45));
-			this.canvas.drawText(triangleCentroid, String(index));
+			this.canvas.drawText(triangleCentroid, String(tileId));
 		}
 		if (this.showTile) {
 			const clippedBaseStart = math.intersectOrigin(
@@ -319,8 +306,8 @@ export default class Renderer {
 		trace: RenderTrace,
 		stats: RenderStats,
 		depth: number,
-		index: number,
-		offset: number,
+		id: number,
+		sideIndex: number,
 		branchStart: Point,
 		branchEnd: Point,
 		clipStart: Point,
@@ -339,33 +326,34 @@ export default class Renderer {
 		if (isSegmentOutsideViewport({ start: branchStart, end: branchEnd })) {
 			return;
 		}
-		if (index < 0) {
+		if (id < 0) {
 			walls.push({ start: branchStart, end: branchEnd });
 			wallBounds.push({ start: clipStart, end: clipEnd });
 			return;
 		}
-		const { shape, sides } = this.physics.plan.tiles[index];
-		const shiftedShape = shiftShape(shape, offset);
+		const { shape, sides } = this.physics.plan.get(id);
+		const shiftedShape = shiftShape(shape, sideIndex);
 		const branchCorner = shiftCorner(branchStart, branchEnd, shiftedShape);
-		this.renderTile([branchStart, branchCorner, branchEnd], stats, index, {
+		this.renderTile([branchStart, branchCorner, branchEnd], stats, id, {
 			start: clipStart,
 			end: clipEnd,
 		});
-		if (this.showSelf && index === this.physics.current) {
-			const shiftedPosition = shiftPosition(
-				{ shape, offset },
-				this.physics.position,
-			);
+		if (this.showSelf && id === this.physics.currentTileId) {
+			const shiftedPosition = shiftPosition(this.physics.position, {
+				shape,
+				index: sideIndex,
+			});
 			avatars.push(shiftCorner(branchStart, branchEnd, shiftedPosition));
 		}
-		const leftSide = sides[(offset + 1) % 3];
-		const rightSide = sides[(offset + 2) % 3];
+		const [leftSideIndex, rightSideIndex] = getAdjacentSides(sideIndex);
+		const leftSide = sides[leftSideIndex];
+		const rightSide = sides[rightSideIndex];
 		this.renderBranch(
 			trace,
 			stats,
 			depth + 1,
-			leftSide.index,
-			leftSide.offset,
+			leftSide?.tileId ?? -1,
+			leftSide?.neighbor ?? 0,
 			branchStart,
 			branchCorner,
 			math.isClockwise(branchStart, clipStart) ? clipStart : branchStart,
@@ -378,8 +366,8 @@ export default class Renderer {
 			trace,
 			stats,
 			depth + 1,
-			rightSide.index,
-			rightSide.offset,
+			rightSide?.tileId ?? -1,
+			rightSide?.neighbor ?? 0,
 			branchCorner,
 			branchEnd,
 			math.isClockwise(branchCorner, clipStart) ? clipStart : branchCorner,
@@ -397,24 +385,25 @@ export default class Renderer {
 		walls: Segment[],
 		wallBounds: Segment[],
 	): void {
-		const { shape, sides } = this.physics.plan.tiles[this.physics.current];
+		const { shape, sides } = this.physics.plan.get(this.physics.currentTileId);
 		const corners = this.getCorners(shape);
 		this.renderTile(
 			corners,
 			stats,
-			this.physics.current,
+			this.physics.currentTileId,
 			undefined,
 			this.showCurrent,
 		);
 		for (let sideIndex = 0; sideIndex < 3; sideIndex++) {
-			const edgeStart = corners[(sideIndex + 2) % 3];
-			const edgeEnd = corners[sideIndex];
+			const [edgeStartIndex, edgeEndIndex] = getSideCorners(sideIndex);
+			const edgeStart = corners[edgeStartIndex];
+			const edgeEnd = corners[edgeEndIndex];
 			this.renderBranch(
 				trace,
 				stats,
 				1,
-				sides[sideIndex].index,
-				sides[sideIndex].offset,
+				sides[sideIndex]?.tileId ?? -1,
+				sides[sideIndex]?.neighbor ?? 0,
 				edgeStart,
 				edgeEnd,
 				edgeStart,
@@ -452,7 +441,7 @@ export default class Renderer {
 		for (let i = 0; i < walls.length; i++) {
 			this.renderWall(trace, walls[i], wallBounds[i]);
 		}
-		this.renderAvatar(point(0, 0));
+		this.renderAvatar(point(0.0, 0.0));
 		if (this.showCornerWall) {
 			this.renderCornerWalls();
 		}

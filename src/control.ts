@@ -1,9 +1,9 @@
 import type Canvas from "./canvas";
 import * as math from "./math";
-import { point } from "./math";
 import type Physics from "./physics";
 import type Renderer from "./render";
 import type { Plan, Point } from "./types";
+import { point } from "./types";
 
 export type ControlCommand =
 	| "turn-left"
@@ -38,6 +38,8 @@ export type ControlAction =
 export type Command =
 	| ControlAction
 	| { type: "reset" }
+	| { type: "select-prev-plan" }
+	| { type: "select-next-plan" }
 	| { type: "set-plan"; slug: string };
 
 const linearVelocity = 0.2;
@@ -163,11 +165,7 @@ export default class Control {
 	): ControlResult {
 		switch (command.type) {
 			case "set-current":
-				this.physics.current = math.clamp(
-					Math.round(command.value),
-					0,
-					this.plan.tiles.length - 1,
-				);
+				this.physics.currentTileId = Math.max(0, Math.round(command.value));
 				this.physics.simulateSnap();
 				return "render-and-sync";
 			case "set-x":

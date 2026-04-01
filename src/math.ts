@@ -1,8 +1,5 @@
 import type { Point } from "./types";
-
-export function point(x: number, y: number): Point {
-	return { x, y };
-}
+import { point } from "./types";
 
 export function clamp(value: number, min: number, max: number): number {
 	return Math.min(Math.max(value, min), max);
@@ -100,6 +97,6 @@ export function intersect(a: Point, b: Point, c: Point, d: Point): Point {
 }
 
 export function intersectOrigin(a: Point, b: Point, direction: Point): Point {
-	const { x: linePosition } = intersect(a, b, point(0, 0), direction);
+	const { x: linePosition } = intersect(a, b, point(0.0, 0.0), direction);
 	return interpolate(a, b, linePosition);
 }

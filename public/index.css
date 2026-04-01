@@ -44,7 +44,7 @@ canvas {
 }
 
 .controls__row--header {
-	grid-template-columns: 38px 1fr auto;
+	grid-template-columns: 78px minmax(0, 1fr) auto;
 }
 
 .controls__row + .controls__row {
@@ -226,6 +226,6 @@ canvas {
 	}
 
 	.controls__row--header {
-		grid-template-columns: 34px 1fr auto;
+		grid-template-columns: 74px minmax(0, 1fr) auto;
 	}
 }

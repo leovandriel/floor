@@ -1,6 +1,6 @@
 import type Canvas from "./canvas";
 import type { Command, ControlCommand, SetNumberCommand } from "./control";
-import { planSlugs } from "./library";
+import { library } from "./library";
 import type Physics from "./physics";
 import type Renderer from "./render";
 import type { Plan, RenderStats } from "./types";
@@ -125,8 +125,8 @@ export default class UI {
 		}
 
 		this.planSelect.value = plan.slug;
-		this.currentInput.value = String(physics.current);
-		this.currentInput.max = String(plan.tiles.length - 1);
+		this.currentInput.value = String(physics.currentTileId);
+		this.currentInput.removeAttribute("max");
 		this.xInput.value = formatStateNumber(physics.position.x);
 		this.yInput.value = formatStateNumber(physics.position.y);
 		this.rotationInput.value = formatStateNumber(physics.rotation);
@@ -230,7 +230,7 @@ export default class UI {
 		}
 
 		this.planSelect.replaceChildren(
-			...planSlugs.map((slug) => {
+			...library.map(({ slug }) => {
 				const option = document.createElement("option");
 				option.value = slug;
 				option.textContent = titleCase(slug);

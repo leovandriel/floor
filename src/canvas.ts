@@ -1,6 +1,6 @@
 import * as math from "./math";
-import { point } from "./math";
 import type { Color, Point, Segment } from "./types";
+import { color, point } from "./types";
 
 type GradientCache = Record<string, CanvasGradient>;
 
@@ -13,16 +13,12 @@ function colorString(c: Color): string {
 	);
 }
 
-export function color(r: number, g: number, b: number, a = 1): Color {
-	return { r, g, b, a };
-}
-
 export function withAlpha(c: Color, a: number): Color {
 	return color(c.r, c.g, c.b, a);
 }
 
 export default class Canvas {
-	private sizeValue: Point = point(0, 0);
+	private sizeValue: Point = point(0.0, 0.0);
 	private scaleValue = 1;
 	private factorValue = 1;
 	private rangeValue = 0.5;

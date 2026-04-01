@@ -1,8 +1,8 @@
 import type Canvas from "./canvas";
 import type { Command, ControlCommand } from "./control";
-import { point } from "./math";
 import type Renderer from "./render";
 import type { MouseAction, Point } from "./types";
+import { point } from "./types";
 import { isControlsTarget } from "./ui";
 
 const commandByCode: Record<string, ControlCommand> = {
@@ -138,6 +138,12 @@ export default class Input {
 		}
 
 		switch (event.code) {
+			case "KeyO":
+				this.onCommand({ type: "select-prev-plan" });
+				return;
+			case "KeyP":
+				this.onCommand({ type: "select-next-plan" });
+				return;
 			case "KeyX":
 				this.onCommand({
 					type: "set-debug",

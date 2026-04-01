@@ -1,10 +1,9 @@
 import type Canvas from "./canvas";
-import { defaultPlanSlug, getPlanBySlug } from "./library";
-import * as math from "./math";
-import { point } from "./math";
 import type Physics from "./physics";
+import { getPlanBySlug } from "./plan";
 import type Renderer from "./render";
 import type { Plan } from "./types";
+import { point } from "./types";
 
 export interface UrlQueryState {
 	current: number;
@@ -38,6 +37,7 @@ const urlQueryKey = {
 } as const;
 
 const urlUpdateIntervalMs = 100;
+const defaultPlanSlug = "square";
 
 const defaultUrlState: UrlState = {
 	path: { slug: defaultPlanSlug },
@@ -93,13 +93,12 @@ export function formatStateNumber(value: number): string {
 
 export function parseUrlQueryState(
 	params: URLSearchParams,
-	plan: Plan,
+	_plan: Plan,
 ): UrlQueryState | undefined {
 	const defaults = defaultUrlState.query;
-	const current = math.clamp(
+	const current = Math.max(
 		parseIntegerParam(params, urlQueryKey.current) ?? defaults.current,
 		0,
-		Math.max(0, plan.tiles.length - 1),
 	);
 	const x = parseNumberParam(params, urlQueryKey.x) ?? defaults.x;
 	const y = parseNumberParam(params, urlQueryKey.y) ?? defaults.y;
@@ -166,7 +165,7 @@ export class UrlStateTracker {
 	) {}
 
 	applyQueryState(query: UrlQueryState): void {
-		this.physics.current = query.current;
+		this.physics.currentTileId = query.current;
 		this.physics.position = point(query.x, query.y);
 		this.physics.rotation = query.rotation;
 		this.physics.scale = query.scale;
@@ -254,7 +253,7 @@ export class UrlStateTracker {
 		return {
 			path: { slug: this.plan.slug },
 			query: {
-				current: this.physics.current,
+				current: this.physics.currentTileId,
 				x: this.physics.position.x,
 				y: this.physics.position.y,
 				rotation: this.physics.rotation,

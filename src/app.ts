@@ -1,10 +1,12 @@
-import Canvas, { color } from "./canvas";
+import Canvas from "./canvas";
 import Control, { type Command } from "./control";
 import Input from "./input";
-import { getValidPlan } from "./library";
+import { library } from "./library";
 import Physics from "./physics";
+import { getValidPlan } from "./plan";
 import Renderer from "./render";
 import type { Plan } from "./types";
+import { color } from "./types";
 import UI, { getCanvas, renderError } from "./ui";
 import { readUrlState, type UrlState, UrlStateTracker } from "./url";
 
@@ -95,6 +97,12 @@ export default class App {
 			case "reset":
 				this.resetScene();
 				return;
+			case "select-prev-plan":
+				this.selectRelativePlan(-1);
+				return;
+			case "select-next-plan":
+				this.selectRelativePlan(1);
+				return;
 			case "set-plan":
 				this.handlePlanSelection(command.slug);
 				return;
@@ -128,6 +136,18 @@ export default class App {
 		this.applyUrlState(readUrlState());
 		this.renderer.render();
 		this.syncControls();
+	}
+
+	private selectRelativePlan(offset: number): void {
+		const currentIndex = library.findIndex(
+			({ slug }) => slug === this.plan.slug,
+		);
+		if (currentIndex < 0) {
+			return;
+		}
+		const nextIndex = (currentIndex + offset + library.length) % library.length;
+		const nextPlan = library[nextIndex];
+		this.handlePlanSelection(nextPlan.slug);
 	}
 
 	private handlePlanSelection(slug: string): void {
