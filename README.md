@@ -69,14 +69,14 @@ npm run typecheck
 - `9`: increase warp
 - `8`: zoom in
 - `7`: zoom out
-- `6`: increase local scene scale
-- `5`: decrease local scene scale
+- `6`: increase local scale
+- `5`: decrease local scale
 
-`warp`, `zoom`, and `scene scale` affect slightly different parts of the rendering:
+`warp`, `zoom`, and `scale` affect slightly different parts of the rendering:
 
 - `warp` changes the canvas projection range
 - `zoom` changes the canvas zoom factor
-- `scene scale` changes the avatar's local scale inside the current tile system
+- `scale` changes the avatar's local scale inside the current tile system
 
 The movement model is intentionally non-Euclidean, so turning and wrapping may feel unusual at first.
 

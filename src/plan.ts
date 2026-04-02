@@ -1,3 +1,4 @@
+import assert from "./assert";
 import { getSideDirectionAtCorner, transitionDirection } from "./geometry";
 import { library } from "./library";
 import { epsilon } from "./math";
@@ -24,28 +25,18 @@ export function getPlanBySlug(slug: string): Plan | undefined {
 	return library.find((plan) => plan.slug === slug);
 }
 
-export function getValidPlan(slug: string): {
-	plan: Plan | undefined;
-	warnings: string[];
-} {
+export function getValidPlan(slug: string): Plan | undefined {
 	const plan = getPlanBySlug(slug);
 	if (!plan) {
-		return { plan: undefined, warnings: [`Unknown plan: ${slug}`] };
+		return undefined;
 	}
-
-	const warnings = checkPlan(plan);
-	return warnings.length > 0
-		? { plan: undefined, warnings }
-		: { plan, warnings };
+	checkPlan(plan);
+	return plan;
 }
 
-export function checkPlan(plan: Plan): string[] {
-	const warnings: string[] = [];
+export function checkPlan(plan: Plan): void {
 	const root = tryGetTile(plan, 0);
-	if (!root) {
-		return ["Missing root tile: 0"];
-	}
-
+	assert(root, "Missing root tile", 0);
 	const visited = new Set<number>();
 	const frontier: Array<{ id: number; depth: number }> = [{ id: 0, depth: 0 }];
 	while (frontier.length > 0) {
@@ -59,16 +50,10 @@ export function checkPlan(plan: Plan): string[] {
 		}
 		visited.add(id);
 		const tile = tryGetTile(plan, id);
-		if (!tile) {
-			warnings.push(`Missing tile: ${id}`);
-			continue;
-		}
+		assert(tile, "Missing tile", id);
 		const { shape, sides } = tile;
-		if (shape.y < -1e-5) {
-			warnings.push(`Flipped tile at ${id}`);
-		} else if (shape.y < 1e-5) {
-			warnings.push(`Flat tile at ${id}`);
-		}
+		assert(shape.y >= -1e-5, "Flipped tile", id);
+		assert(shape.y >= 1e-5, "Flat tile", id);
 		for (let j = 0; j < 3; j++) {
 			const side = sides[j];
 			if (!side) {
@@ -76,21 +61,11 @@ export function checkPlan(plan: Plan): string[] {
 			}
 			const { tileId, neighbor } = side;
 			const inverseTile = tryGetTile(plan, tileId);
-			if (!inverseTile) {
-				warnings.push(`Missing tile at ${id}:${j}`);
-				continue;
-			}
+			assert(inverseTile, "Missing tile at", id, j);
 			const inverse = inverseTile.sides[neighbor];
-			if (!inverse) {
-				warnings.push(`Inverse missing at ${id}:${j}`);
-				continue;
-			}
-			if (id !== inverse.tileId) {
-				warnings.push(`Inverse missing at ${id}:${j}`);
-			}
-			if (j !== inverse.neighbor) {
-				warnings.push(`Inverse offset at ${id}:${j}`);
-			}
+			assert(inverse, "Inverse missing at", id, j);
+			assert(id === inverse.tileId, "Inverse missing at", id, j);
+			assert(j === inverse.neighbor, "Inverse offset at", id, j);
 			if (
 				depth < maxPlanValidationDepth &&
 				visited.size + frontier.length < maxPlanValidationCount
@@ -99,10 +74,6 @@ export function checkPlan(plan: Plan): string[] {
 			}
 		}
 	}
-	if (frontier.length > 0) {
-		warnings.push("Plan validation limit reached");
-	}
-	return warnings;
 }
 
 function ensureCornerWallDirections(
@@ -131,11 +102,13 @@ function getCornerWallDirection(
 	visiting: Set<string>,
 	depth = 0,
 ): Point | undefined {
-	if (depth >= maxCornerWallDepth) {
-		throw new Error(
-			`Corner wall recursion limit reached at ${tileIndex}:${cornerIndex}:${sideIndex}`,
-		);
-	}
+	assert(
+		depth < maxCornerWallDepth,
+		"Corner wall recursion limit reached",
+		tileIndex,
+		cornerIndex,
+		sideIndex,
+	);
 	const key = `${tileIndex}:${cornerIndex}:${sideIndex}`;
 	const cached = plan.cornerWallCache[tileIndex]?.[cornerIndex]?.[sideIndex];
 	if (cached !== undefined) {

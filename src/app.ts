@@ -40,13 +40,13 @@ export default class App {
 			return;
 		}
 		const urlState = readUrlState();
-		const { plan, warnings } = getValidPlan(urlState.path.slug);
+		const plan = getValidPlan(urlState.path.slug);
 		if (!plan) {
-			renderError(warnings);
+			renderError([`Unknown plan: ${urlState.path.slug}`]);
 			return;
 		}
 		const app = new App(context, plan);
-		app.resetSceneState();
+		app.initializeState();
 		app.applyUrlState(urlState);
 		app.ui.init((command) => app.applyCommand(command));
 		app.renderer.render();
@@ -95,7 +95,7 @@ export default class App {
 	private applyCommand(command: Command): void {
 		switch (command.type) {
 			case "reset":
-				this.resetScene();
+				this.resetPlan();
 				return;
 			case "select-prev-plan":
 				this.selectRelativePlan(-1);
@@ -156,29 +156,29 @@ export default class App {
 		}
 
 		const debug = this.renderer.debug;
-		const { plan: nextPlan, warnings } = getValidPlan(slug);
+		const nextPlan = getValidPlan(slug);
 		if (!nextPlan) {
-			renderError(warnings);
+			renderError([`Unknown plan: ${slug}`]);
 			this.syncControls();
 			return;
 		}
 
 		this.plan = nextPlan;
 		this.input.clear();
-		this.resetSceneState();
+		this.initializeState();
 		this.renderer.debug = debug;
 		this.renderer.render();
 		this.syncControls();
 		this.urlState.updateUrl();
 	}
 
-	private resetScene(): void {
+	private resetPlan(): void {
 		this.input.clear();
-		this.resetSceneState();
+		this.initializeState();
 		this.renderAndSync(true);
 	}
 
-	private resetSceneState(): void {
+	private initializeState(): void {
 		this.canvas = new Canvas(this.context, color(0.8, 0.8, 0.8));
 		this.canvas.resizeToWindow();
 		this.physics = new Physics(this.plan);
@@ -201,14 +201,14 @@ export default class App {
 	}
 
 	private applyUrlState(state: UrlState): void {
-		const { plan, warnings } = getValidPlan(state.path.slug);
+		const plan = getValidPlan(state.path.slug);
 		if (!plan) {
-			renderError(warnings);
+			renderError([`Unknown plan: ${state.path.slug}`]);
 			return;
 		}
 		if (plan !== this.plan) {
 			this.plan = plan;
-			this.resetSceneState();
+			this.initializeState();
 		}
 		this.urlState.applyQueryState(state.query);
 	}

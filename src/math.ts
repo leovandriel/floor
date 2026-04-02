@@ -7,33 +7,24 @@ export function clamp(value: number, min: number, max: number): number {
 
 export const epsilon = 1e-5;
 
-export function size(v: Point): number {
-	return Math.sqrt(v.x * v.x + v.y * v.y);
-}
-
-export function pointDistanceSq(a: Point, b: Point): number {
-	return (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y);
-}
-
-export function lineDistanceSq(a: Point, b: Point, c: Point): number {
-	const n = (b.y - a.y) * c.x - (b.x - a.x) * c.y + b.x * a.y + b.y * a.x;
-	return (n * n) / pointDistanceSq(a, b);
-}
-
-export function interpolate(p: Point, q: Point, t: number): Point {
-	return point(p.x * (1 - t) + q.x * t, p.y * (1 - t) + q.y * t);
-}
-
-export function segmentDistanceSq(a: Point, b: Point, c: Point): number {
-	const p =
-		((c.x - a.x) * (b.x - a.x) + (c.y - a.y) * (b.y - a.y)) /
-		pointDistanceSq(a, b);
-	const q = interpolate(a, b, Math.max(0, Math.min(1, p)));
-	return pointDistanceSq(q, c);
+export function add(a: Point, b: Point): Point {
+	return point(a.x + b.x, a.y + b.y);
 }
 
 export function sub(a: Point, b: Point): Point {
 	return point(a.x - b.x, a.y - b.y);
+}
+
+export function mul(a: Point, b: number): Point {
+	return point(a.x * b, a.y * b);
+}
+
+export function div(a: Point, b: number): Point {
+	return point(a.x / b, a.y / b);
+}
+
+export function neg(v: Point): Point {
+	return point(-v.x, -v.y);
 }
 
 export function isZero(a: Point): boolean {
@@ -52,8 +43,8 @@ export function cosTurns(v: number): number {
 	return Math.cos(v * Math.PI * 2);
 }
 
-export function atan2Turns(y: number, x: number): number {
-	return Math.atan2(y, x) / Math.PI / 2;
+export function atan2Turns(v: Point): number {
+	return Math.atan2(v.y, v.x) / Math.PI / 2;
 }
 
 export function noise(): number {
@@ -68,16 +59,69 @@ export function isClockwise3(a: Point, b: Point, c: Point): boolean {
 	return (a.x - b.x) * (c.y - b.y) < (a.y - b.y) * (c.x - b.x);
 }
 
-export function add(a: Point, b: Point): Point {
-	return point(a.x + b.x, a.y + b.y);
-}
-
 export function dot(a: Point, b: Point): number {
 	return a.x * b.x + a.y * b.y;
 }
 
-export function mul(a: Point, b: number): Point {
-	return point(a.x * b, a.y * b);
+export function cross(a: Point, b: Point): number {
+	return a.x * b.y - a.y * b.x;
+}
+
+export function dotCross(a: Point, b: Point): Point {
+	return point(dot(a, b), cross(a, b));
+}
+
+export function reflect1X(v: Point): Point {
+	return point(1 - v.x, v.y);
+}
+
+export function reflectY(v: Point): Point {
+	return point(v.x, -v.y);
+}
+
+export function rotateLeft(v: Point): Point {
+	return point(-v.y, v.x);
+}
+
+export function rotateRight(v: Point): Point {
+	return point(v.y, -v.x);
+}
+
+export function lengthSq(v: Point): number {
+	return dot(v, v);
+}
+
+export function size(v: Point): number {
+	return Math.sqrt(dot(v, v));
+}
+
+export function normSq(v: Point): Point {
+	return div(v, lengthSq(v));
+}
+
+export function norm(v: Point): Point {
+	return div(v, size(v));
+}
+
+export function pointDistanceSq(a: Point, b: Point): number {
+	return lengthSq(sub(a, b));
+}
+
+export function lineDistanceSq(a: Point, b: Point, c: Point): number {
+	const n = (b.y - a.y) * c.x - (b.x - a.x) * c.y + b.x * a.y + b.y * a.x;
+	return (n * n) / pointDistanceSq(a, b);
+}
+
+export function interpolate(p: Point, q: Point, t: number): Point {
+	return point(p.x * (1 - t) + q.x * t, p.y * (1 - t) + q.y * t);
+}
+
+export function segmentDistanceSq(a: Point, b: Point, c: Point): number {
+	const p =
+		((c.x - a.x) * (b.x - a.x) + (c.y - a.y) * (b.y - a.y)) /
+		pointDistanceSq(a, b);
+	const q = interpolate(a, b, Math.max(0, Math.min(1, p)));
+	return pointDistanceSq(q, c);
 }
 
 export function project(a: Point, b: Point): Point {

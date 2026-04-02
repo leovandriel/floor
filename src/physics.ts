@@ -2,7 +2,6 @@ import {
 	getInsetEdge,
 	getInwardNormal,
 	isInsideTile,
-	type ShapeSide,
 	transitionPosition,
 	transitionRotation,
 	transitionScale,
@@ -10,12 +9,8 @@ import {
 import * as math from "./math";
 import { epsilon } from "./math";
 import { ensureCornerWalls } from "./plan";
-import {
-	getSideCorners,
-	getSideOppositeCorner,
-	getTileCorners,
-} from "./topology";
-import type { Plan, Point } from "./types";
+import { getSideCorners, getTileCorners } from "./topology";
+import type { Plan, Point, ShapeSide } from "./types";
 import { point } from "./types";
 
 export { transitionPosition } from "./geometry";
@@ -44,12 +39,7 @@ export default class Physics {
 			const side = sides[sideIndex];
 			const collisionEdge =
 				side === undefined
-					? getInsetEdge(
-							sideStart,
-							sideEnd,
-							corners[getSideOppositeCorner(sideIndex)],
-							avatarRadiusWorld,
-						)
+					? getInsetEdge(sideStart, sideEnd, avatarRadiusWorld)
 					: { start: sideStart, end: sideEnd };
 			if (math.isClockwise3(collisionEdge.start, collisionEdge.end, next)) {
 				const { x: edgePosition, y: movePosition } = math.intersect(
@@ -90,7 +80,7 @@ export default class Physics {
 						const to: ShapeSide = { shape: nextShape, index: neighbor };
 						// Seam crossings transport position, heading, and scale together.
 						this.position = math.interpolate(this.position, next, movePosition);
-						this.rotation = transitionRotation(this.rotation, from, to);
+						this.rotation += transitionRotation(from, to);
 						this.position = transitionPosition(this.position, from, to);
 						const shiftedNext = transitionPosition(next, from, to);
 						this.scale *= transitionScale(from, to);
@@ -128,11 +118,7 @@ export default class Physics {
 			const [sideStartIndex, sideEndIndex] = getSideCorners(sideIndex);
 			const sideStart = corners[sideStartIndex];
 			const sideEnd = corners[sideEndIndex];
-			const inwardNormal = getInwardNormal(
-				sideStart,
-				sideEnd,
-				corners[getSideOppositeCorner(sideIndex)],
-			);
+			const inwardNormal = getInwardNormal(sideStart, sideEnd);
 			const signedDistance = math.dot(
 				math.sub(this.position, sideStart),
 				inwardNormal,
@@ -152,7 +138,7 @@ export default class Physics {
 				continue;
 			}
 			const corner = corners[cornerIndex];
-			const delta = math.sub(this.position, corner);
+			let delta = math.sub(this.position, corner);
 			const distance = math.size(delta);
 			if (distance < epsilon) {
 				const outward = point(0.0, 1.0);
@@ -167,6 +153,7 @@ export default class Physics {
 					corner,
 					math.mul(delta, (avatarRadiusWorld + epsilon) / distance),
 				);
+				delta = math.sub(this.position, corner);
 			}
 			for (const wallDirection of [cornerWall.left, cornerWall.right]) {
 				if (!wallDirection) {
@@ -185,19 +172,15 @@ export default class Physics {
 				) {
 					continue;
 				}
-				const inwardNormal = getInwardNormal(corner, wallRayEnd, this.position);
-				const signedDistance = math.dot(
-					math.sub(this.position, corner),
-					inwardNormal,
-				);
-				if (signedDistance < avatarRadiusWorld) {
-					this.position = math.add(
-						this.position,
-						math.mul(
-							inwardNormal,
-							avatarRadiusWorld - signedDistance + epsilon,
-						),
-					);
+				const inwardNormal = getInwardNormal(corner, wallRayEnd);
+				const signedDistance = math.dot(delta, inwardNormal);
+				if (
+					signedDistance > -avatarRadiusWorld &&
+					signedDistance < avatarRadiusWorld
+				) {
+					const push = avatarRadiusWorld - signedDistance + epsilon;
+					this.position = math.add(this.position, math.mul(inwardNormal, push));
+					delta = math.sub(this.position, corner);
 				}
 			}
 		}
@@ -220,7 +203,7 @@ export default class Physics {
 			const { shape: nextShape } = this.plan.get(tileId);
 			const from: ShapeSide = { shape, index: sideIndex };
 			const to: ShapeSide = { shape: nextShape, index: neighbor };
-			this.rotation = transitionRotation(this.rotation, from, to);
+			this.rotation += transitionRotation(from, to);
 			this.position = transitionPosition(this.position, from, to);
 			this.scale *= transitionScale(from, to);
 			this.currentTileId = tileId;

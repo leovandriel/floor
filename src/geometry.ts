@@ -1,13 +1,20 @@
-import * as math from "./math";
-import { epsilon } from "./math";
+import {
+	add,
+	atan2Turns,
+	dotCross,
+	epsilon,
+	mul,
+	neg,
+	norm,
+	normSq,
+	reflect1X,
+	reflectY,
+	rotateRight,
+	size,
+	sub,
+} from "./math";
 import { getSideCorners, getTileCorners } from "./topology";
-import type { Point, Segment } from "./types";
-import { point } from "./types";
-
-export interface ShapeSide {
-	shape: Point;
-	index: number;
-}
+import type { Point, Segment, ShapeSide } from "./types";
 
 export function shiftPosition(
 	position: Point,
@@ -16,20 +23,10 @@ export function shiftPosition(
 	switch (index) {
 		case 0:
 			return position;
-		case 1: {
-			const d = shape.x * shape.x + shape.y * shape.y;
-			return point(
-				1 - (shape.x * position.x + shape.y * position.y) / d,
-				(shape.y * position.x - shape.x * position.y) / d,
-			);
-		}
-		case 2: {
-			const e = (1 - shape.x) * (1 - shape.x) + shape.y * shape.y;
-			return point(
-				((1 - shape.x) * (1 - position.x) + shape.y * position.y) / e,
-				(shape.y * (1 - position.x) - (1 - shape.x) * position.y) / e,
-			);
-		}
+		case 1:
+			return reflect1X(dotCross(position, normSq(shape)));
+		case 2:
+			return dotCross(reflect1X(position), normSq(reflect1X(shape)));
 	}
 	return position;
 }
@@ -42,15 +39,9 @@ export function unshiftPosition(
 		case 0:
 			return position;
 		case 1:
-			return point(
-				shape.x * (1 - position.x) + shape.y * position.y,
-				shape.y * (1 - position.x) - shape.x * position.y,
-			);
+			return dotCross(reflect1X(position), shape);
 		case 2:
-			return point(
-				1 - (1 - shape.x) * position.x - shape.y * position.y,
-				shape.y * position.x - (1 - shape.x) * position.y,
-			);
+			return reflect1X(dotCross(position, reflect1X(shape)));
 	}
 	return position;
 }
@@ -60,29 +51,20 @@ export function transitionPosition(
 	from: ShapeSide,
 	to: ShapeSide,
 ): Point {
-	const shift1 = shiftPosition(position, from);
-	const shift2 = point(1 - shift1.x, -shift1.y);
-	return unshiftPosition(shift2, to);
+	return unshiftPosition(
+		reflectY(reflect1X(shiftPosition(position, from))),
+		to,
+	);
 }
 
 function shiftDirection(direction: Point, { shape, index }: ShapeSide): Point {
 	switch (index) {
 		case 0:
 			return direction;
-		case 1: {
-			const d = shape.x * shape.x + shape.y * shape.y;
-			return point(
-				(-shape.x * direction.x - shape.y * direction.y) / d,
-				(shape.y * direction.x - shape.x * direction.y) / d,
-			);
-		}
-		case 2: {
-			const e = (1 - shape.x) * (1 - shape.x) + shape.y * shape.y;
-			return point(
-				(-(1 - shape.x) * direction.x + shape.y * direction.y) / e,
-				(-shape.y * direction.x - (1 - shape.x) * direction.y) / e,
-			);
-		}
+		case 1:
+			return neg(dotCross(normSq(shape), direction));
+		case 2:
+			return neg(dotCross(reflectY(direction), normSq(reflect1X(shape))));
 	}
 	return direction;
 }
@@ -95,15 +77,9 @@ function unshiftDirection(
 		case 0:
 			return direction;
 		case 1:
-			return point(
-				-shape.x * direction.x + shape.y * direction.y,
-				-shape.y * direction.x - shape.x * direction.y,
-			);
+			return neg(dotCross(reflectY(direction), shape));
 		case 2:
-			return point(
-				-(1 - shape.x) * direction.x - shape.y * direction.y,
-				shape.y * direction.x - (1 - shape.x) * direction.y,
-			);
+			return neg(dotCross(reflect1X(shape), direction));
 	}
 	return direction;
 }
@@ -113,22 +89,17 @@ export function transitionDirection(
 	from: ShapeSide,
 	to: ShapeSide,
 ): Point {
-	const shifted = shiftDirection(direction, from);
-	return unshiftDirection(point(-shifted.x, -shifted.y), to);
+	return unshiftDirection(neg(shiftDirection(direction, from)), to);
 }
 
 export function shiftShape(shape: Point, sideIndex: number): Point {
 	switch (sideIndex) {
 		case 0:
 			return shape;
-		case 1: {
-			const d = shape.x * shape.x + shape.y * shape.y;
-			return point(1 - shape.x / d, shape.y / d);
-		}
-		case 2: {
-			const e = (1 - shape.x) * (1 - shape.x) + shape.y * shape.y;
-			return point((1 - shape.x) / e, shape.y / e);
-		}
+		case 1:
+			return reflect1X(normSq(shape));
+		case 2:
+			return normSq(reflect1X(shape));
 	}
 	return shape;
 }
@@ -138,9 +109,9 @@ export function shiftScale({ shape, index }: ShapeSide): number {
 		case 0:
 			return 1;
 		case 1:
-			return math.size(shape);
+			return size(shape);
 		case 2:
-			return math.size(point(1 - shape.x, shape.y));
+			return size(reflect1X(shape));
 	}
 	return 1;
 }
@@ -149,64 +120,47 @@ export function transitionScale(from: ShapeSide, to: ShapeSide): number {
 	return shiftScale(from) / shiftScale(to);
 }
 
-export function shiftRotation(rotation: number, side: ShapeSide): number {
+export function shiftRotation(side: ShapeSide): number {
 	switch (side.index) {
 		case 0:
-			return rotation;
+			return 0;
 		case 1:
-			return rotation + math.atan2Turns(side.shape.y, side.shape.x) - 0.5;
+			return atan2Turns(side.shape) - 0.5;
 		case 2:
-			return rotation + 0.5 - math.atan2Turns(side.shape.y, 1 - side.shape.x);
+			return -atan2Turns(reflect1X(side.shape)) + 0.5;
 	}
-	return rotation;
+	return 0;
 }
 
-export function unshiftRotation(rotation: number, side: ShapeSide): number {
+export function unshiftRotation(side: ShapeSide): number {
 	switch (side.index) {
 		case 0:
-			return rotation;
+			return 0;
 		case 1:
-			return rotation - math.atan2Turns(side.shape.y, side.shape.x) + 0.5;
+			return -atan2Turns(side.shape) + 0.5;
 		case 2:
-			return rotation - 0.5 + math.atan2Turns(side.shape.y, 1 - side.shape.x);
+			return atan2Turns(reflect1X(side.shape)) - 0.5;
 	}
-	return rotation;
+	return 0;
 }
 
-export function transitionRotation(
-	rotation: number,
-	from: ShapeSide,
-	to: ShapeSide,
-): number {
-	return unshiftRotation(shiftRotation(rotation, from) + 0.5, to);
+export function transitionRotation(from: ShapeSide, to: ShapeSide): number {
+	return shiftRotation(from) + unshiftRotation(to) + 0.5;
 }
 
-export function getInwardNormal(
-	sideStart: Point,
-	sideEnd: Point,
-	interiorPoint: Point,
-): Point {
-	const edge = math.sub(sideEnd, sideStart);
-	const length = math.size(edge);
-	if (length < epsilon) {
-		return point(0.0, 0.0);
-	}
-	const normalA = point(-edge.y / length, edge.x / length);
-	return math.dot(math.sub(interiorPoint, sideStart), normalA) > 0
-		? normalA
-		: math.mul(normalA, -1);
+export function getInwardNormal(sideStart: Point, sideEnd: Point): Point {
+	return rotateRight(norm(sub(sideEnd, sideStart)));
 }
 
 export function getInsetEdge(
 	sideStart: Point,
 	sideEnd: Point,
-	interiorPoint: Point,
 	inset: number,
 ): Segment {
-	const inwardNormal = getInwardNormal(sideStart, sideEnd, interiorPoint);
+	const insetDelta = mul(getInwardNormal(sideStart, sideEnd), inset);
 	return {
-		start: math.add(sideStart, math.mul(inwardNormal, inset)),
-		end: math.add(sideEnd, math.mul(inwardNormal, inset)),
+		start: add(sideStart, insetDelta),
+		end: add(sideEnd, insetDelta),
 	};
 }
 
@@ -220,10 +174,7 @@ export function getSideDirectionAtCorner(
 	const sideStart = corners[sideStartIndex];
 	const sideEnd = corners[sideEndIndex];
 	const otherCorner = cornerIndex === sideStartIndex ? sideEnd : sideStart;
-	return point(
-		otherCorner.x - corners[cornerIndex].x,
-		otherCorner.y - corners[cornerIndex].y,
-	);
+	return sub(otherCorner, corners[cornerIndex]);
 }
 
 export function isInsideTile(position: Point, shape: Point): boolean {

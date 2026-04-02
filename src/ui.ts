@@ -1,3 +1,4 @@
+import assert from "./assert";
 import type Canvas from "./canvas";
 import type { Command, ControlCommand, SetNumberCommand } from "./control";
 import { library } from "./library";
@@ -15,10 +16,8 @@ function getRequiredElement<T extends HTMLElement>(
 	type: { new (): T },
 ): T {
 	const element = document.getElementById(id);
-	if (element instanceof type) {
-		return element;
-	}
-	throw new Error(`Missing element: ${id}`);
+	assert(element instanceof type, "Missing element", id);
+	return element;
 }
 
 export function getCanvas(): HTMLCanvasElement | undefined {
@@ -83,9 +82,10 @@ export default class UI {
 		const collapseButton = this.panel.querySelector(
 			"[data-action='toggle-panel']",
 		);
-		if (!(collapseButton instanceof HTMLButtonElement)) {
-			throw new Error("Missing element: controls toggle button");
-		}
+		assert(
+			collapseButton instanceof HTMLButtonElement,
+			"Missing element: controls toggle button",
+		);
 		this.collapseButton = collapseButton;
 		this.currentInput = getRequiredElement("state-current", HTMLInputElement);
 		this.xInput = getRequiredElement("state-x", HTMLInputElement);

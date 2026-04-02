@@ -177,7 +177,7 @@ test("handleMouse emits drag-mouse even when a corner is hovered", () => {
 		"move",
 	);
 
-	assert.deepEqual(commands.at(-1), {
+	assert.deepEqual(commands[commands.length - 1], {
 		type: "drag-mouse",
 		delta: point(-12.0, 12.0),
 	});
@@ -200,7 +200,7 @@ test("KeyP selects the next plan with wraparound", () => {
 	const input = new Input({} as never, {} as never, (command) =>
 		commands.push(command),
 	);
-	const lastPlan = library.at(-1);
+	const lastPlan = library[library.length - 1];
 	if (!lastPlan) {
 		throw new Error("Expected at least one plan");
 	}
@@ -227,7 +227,7 @@ test("KeyO selects the previous plan with wraparound", () => {
 		commands.push(command),
 	);
 	const firstPlan = library[0];
-	const lastPlan = library.at(-1);
+	const lastPlan = library[library.length - 1];
 	if (!lastPlan) {
 		throw new Error("Expected at least one plan");
 	}

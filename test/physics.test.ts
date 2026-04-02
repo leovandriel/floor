@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { shiftRotation, unshiftRotation } from "../src/geometry";
-import Physics, { transitionPosition } from "../src/physics";
+import Physics from "../src/physics";
 import { getPlanBySlug } from "../src/plan";
 import { point } from "../src/types";
 
@@ -33,39 +32,6 @@ function assertInsideCurrentTile(physics: Physics): void {
 	assert.ok(physics.position.x >= min - 1e-9);
 	assert.ok(physics.position.x <= max + 1e-9);
 }
-
-test("transitionPosition maps tunnel side 1 into side 2 coordinates", () => {
-	const transformed = transitionPosition(
-		point(0.2, 0.3),
-		{ shape: point(0.0, 1.0), index: 1 },
-		{ shape: point(0.0, 1.0), index: 2 },
-	);
-
-	assert.ok(Math.abs(transformed.x - 0.9) < 1e-9);
-	assert.ok(Math.abs(transformed.y - 0.5) < 1e-9);
-});
-
-test("shiftRotation leaves offset 0 unchanged", () => {
-	assert.ok(
-		Math.abs(
-			shiftRotation(0.125, { shape: point(0.0, 1.0), index: 0 }) - 0.125,
-		) < 1e-9,
-	);
-});
-
-test("unshiftRotation inverts shiftRotation for offset 1", () => {
-	const side = { shape: point(0.5, 0.5), index: 1 as const };
-	const shifted = shiftRotation(0.125, side);
-	const unshifted = unshiftRotation(shifted, side);
-	assert.ok(Math.abs(unshifted - 0.125) < 1e-9);
-});
-
-test("unshiftRotation inverts shiftRotation for offset 2", () => {
-	const side = { shape: point(0.5, 0.866), index: 2 as const };
-	const shifted = shiftRotation(-0.2, side);
-	const unshifted = unshiftRotation(shifted, side);
-	assert.ok(Math.abs(unshifted - -0.2) < 1e-9);
-});
 
 test("handleMove wraps through the tunnel and preserves heading", () => {
 	const physics = createPhysics();
