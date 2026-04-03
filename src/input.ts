@@ -1,9 +1,9 @@
-import type Canvas from "./canvas";
 import type { Command, ControlCommand } from "./control";
 import type Renderer from "./render";
 import type { MouseAction, Point } from "./types";
 import { point } from "./types";
 import { isControlsTarget } from "./ui";
+import type View from "./view";
 
 const commandByCode: Record<string, ControlCommand> = {
 	ArrowLeft: "turn-left",
@@ -67,7 +67,7 @@ export default class Input {
 	private lastDrag: Point | undefined = undefined;
 
 	constructor(
-		private readonly canvas: Canvas,
+		private readonly view: View,
 		private readonly renderer: Renderer,
 		private readonly onCommand: (command: Command) => void,
 	) {}
@@ -103,21 +103,16 @@ export default class Input {
 		} else if (this.lastDrag && action === "up") {
 			this.lastDrag = undefined;
 		} else if (this.lastDrag && action === "move") {
-			const delta = this.canvas.unscale(
-				point(this.lastDrag.x - p.x, this.lastDrag.y - p.y),
+			const delta = point(
+				(this.lastDrag.x - p.x) / this.view.scale,
+				(p.y - this.lastDrag.y) / this.view.scale,
 			);
 			this.lastDrag = p;
 			this.onCommand({
 				type: "drag-mouse",
-				delta: point(delta.x * this.canvas.range, delta.y * this.canvas.range),
+				delta: point(delta.x * this.view.range, delta.y * this.view.range),
 			});
-			return;
 		}
-
-		this.onCommand({
-			type: "move-mouse",
-			mouse: action === "move" ? p : undefined,
-		});
 	}
 
 	private handleKey(event: KeyboardEvent): void {
@@ -148,6 +143,12 @@ export default class Input {
 				this.onCommand({
 					type: "set-debug",
 					value: !this.renderer.debug,
+				});
+				return;
+			case "KeyG":
+				this.onCommand({
+					type: "set-webgl",
+					value: !this.renderer.webgl,
 				});
 				return;
 			case "KeyR":

@@ -1,12 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { arrayPlan } from "../src/library";
-import {
-	checkPlan,
-	ensureCornerWalls,
-	getPlanBySlug,
-	getValidPlan,
-} from "../src/plan";
+import { arrayPlan, library } from "../src/library";
+import { assertValidPlan, ensureCornerWalls, getPlanBySlug } from "../src/plan";
 import { plan, point, side, tile } from "../src/types";
 
 test("getPlanBySlug returns known library plans", () => {
@@ -14,11 +9,11 @@ test("getPlanBySlug returns known library plans", () => {
 	assert.equal(getPlanBySlug("missing"), undefined);
 });
 
-test("getValidPlan returns undefined for unknown plans", () => {
-	assert.equal(getValidPlan("missing"), undefined);
+test("getPlanBySlug returns undefined for unknown plans", () => {
+	assert.equal(getPlanBySlug("missing"), undefined);
 });
 
-test("checkPlan reports a missing root tile", () => {
+test("assertValidPlan reports a missing root tile", () => {
 	const emptyRoot = arrayPlan("broken-root", [
 		tile(point(0.5, 0.5), undefined, undefined, undefined),
 	]);
@@ -26,28 +21,25 @@ test("checkPlan reports a missing root tile", () => {
 		throw new Error("Missing");
 	};
 
-	assert.throws(() => checkPlan(emptyRoot), /Missing root tile: 0/);
+	assert.throws(() => assertValidPlan(emptyRoot), /Missing root tile: 0/);
 });
 
-test("checkPlan reports inverse mismatches", () => {
+test("assertValidPlan reports inverse mismatches", () => {
 	const brokenInverse = arrayPlan("broken-inverse", [
 		tile(point(0.5, 0.5), side(1, 0), undefined, undefined),
 		tile(point(0.5, 0.5), undefined, undefined, undefined),
 	]);
 
-	assert.throws(() => checkPlan(brokenInverse), /Inverse missing at: 0, 0/);
+	assert.throws(
+		() => assertValidPlan(brokenInverse),
+		/Inverse missing at: 0, 0/,
+	);
 });
 
-test("checkPlan accepts a valid library plan", () => {
-	const square = getPlanBySlug("square");
-	if (!square) {
-		throw new Error("Missing square plan");
+test("assertValidPlan accepts every library plan", () => {
+	for (const plan of library) {
+		assert.doesNotThrow(() => assertValidPlan(plan), plan.slug);
 	}
-	assert.doesNotThrow(() => checkPlan(square));
-});
-
-test("getValidPlan accepts the infinite maze", () => {
-	assert.equal(getValidPlan("maze"), getPlanBySlug("maze"));
 });
 
 test("ensureCornerWalls returns no walls for a single open triangle", () => {
@@ -83,7 +75,7 @@ test("procedural mazes have reciprocal shared sides", () => {
 	}
 });
 
-test("checkPlan stops when validation depth is reached", () => {
+test("assertValidPlan stops when validation depth is reached", () => {
 	const tiles = Array.from({ length: 102 }, (_, index) =>
 		tile(
 			point(0.5, 0.5),
@@ -94,7 +86,7 @@ test("checkPlan stops when validation depth is reached", () => {
 	);
 	const deepPlan = arrayPlan("deep", tiles);
 
-	assert.doesNotThrow(() => checkPlan(deepPlan));
+	assert.doesNotThrow(() => assertValidPlan(deepPlan));
 });
 
 test("ensureCornerWalls populates the corner wall cache", () => {

@@ -45,6 +45,44 @@ function mazePlan(
 	});
 }
 
+function curlPlan(slug: string, count: number): Plan {
+	assert(count >= 2, "Curl count must be at least 2", count);
+	const index = count * 2;
+	const [x, y] = [6 / 11, 5 / 11];
+	return plan(slug, (id: number): Tile => {
+		assert(Number.isInteger(id), "Invalid tile id", id);
+		if (id === 0) {
+			return tile(point(0.0, 1.2), undefined, undefined, side(1, 1));
+		} else if (id === index + 1) {
+			return tile(
+				point(x, y),
+				undefined,
+				side(index + 0, 1),
+				side(index + 2, 1),
+			);
+		} else if (id === index + 2) {
+			return tile(
+				point(y, y),
+				undefined,
+				side(index + 1, 2),
+				side(index + 3, 1),
+			);
+		} else if (id === index + 3) {
+			return tile(point(1.0, 1.2), undefined, side(index + 2, 2), undefined);
+		} else if (id % 2 === 1) {
+			return tile(
+				point(x, y),
+				undefined,
+				side(id - 1, id === 1 ? 2 : 1),
+				side(id + 1, 2),
+			);
+		} else if (id % 2 === 0) {
+			return tile(point(6.0, 5.0), undefined, side(id + 1, 1), side(id - 1, 2));
+		}
+		assert(false, "Invalid tile id", id);
+	});
+}
+
 export const library: Plan[] = [
 	arrayPlan("triangle", [
 		tile(point(0.5, 0.866), undefined, undefined, undefined),
@@ -67,22 +105,14 @@ export const library: Plan[] = [
 		tile(point(0.5, 0.5), side(4, 1), undefined, side(3, 2)),
 	]),
 	arrayPlan("base", [
-		tile(point(0.0, 1.0), undefined, undefined, side(1, 0)),
-		tile(point(0.0, 1.0), side(0, 2), side(2, 0), undefined),
-		tile(point(0.0, 1.0), side(1, 1), side(3, 0), undefined),
-		tile(point(0.0, 1.0), side(2, 1), side(4, 0), undefined),
-		tile(point(0.5, 0.5), side(3, 1), undefined, undefined),
-	]),
-	arrayPlan("curl", [
 		tile(point(0.0, 1.2), undefined, undefined, side(1, 1)),
 		tile(point(0.545, 0.455), undefined, side(0, 2), side(2, 2)),
 		tile(point(6.0, 5.0), undefined, side(3, 1), side(1, 2)),
-		tile(point(0.545, 0.455), undefined, side(2, 1), side(4, 2)),
-		tile(point(6.0, 5.0), undefined, side(5, 1), side(3, 2)),
-		tile(point(0.545, 0.455), undefined, side(4, 1), side(6, 1)),
-		tile(point(0.455, 0.455), undefined, side(5, 2), side(7, 1)),
-		tile(point(1.0, 1.2), undefined, side(6, 2), undefined),
+		tile(point(0.545, 0.455), undefined, side(2, 1), side(4, 1)),
+		tile(point(0.455, 0.455), undefined, side(3, 2), side(5, 1)),
+		tile(point(1.0, 1.2), undefined, side(4, 2), undefined),
 	]),
+	curlPlan("curl", 2),
 	arrayPlan("circle", [
 		tile(point(-0.25, 0.97), side(1, 0), undefined, side(1, 2)),
 		tile(point(0.38, 1.45), side(0, 0), undefined, side(0, 2)),

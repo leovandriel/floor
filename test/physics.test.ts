@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import Physics from "../src/physics";
+import Physics, { isInsideTile } from "../src/physics";
 import { getPlanBySlug } from "../src/plan";
 import { point } from "../src/types";
 
@@ -103,4 +103,12 @@ test("handleMove wraps smoothly across the hex side seam", () => {
 	assert.ok(Math.abs(physics.position.y - 0.050001279456296066) < 1e-9);
 	assert.ok(Math.abs(physics.rotation - -0.16667070989350627) < 1e-9);
 	assert.equal(physics.scale, 0.2);
+});
+
+test("isInsideTile accepts interior points and rejects exterior points", () => {
+	const shape = point(0.5, 0.5);
+
+	assert.equal(isInsideTile(point(0.5, 0.1), shape), true);
+	assert.equal(isInsideTile(point(-0.1, 0.1), shape), false);
+	assert.equal(isInsideTile(point(0.5, 0.6), shape), false);
 });

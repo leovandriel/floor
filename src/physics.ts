@@ -1,19 +1,28 @@
 import {
 	getInsetEdge,
 	getInwardNormal,
-	isInsideTile,
 	transitionPosition,
 	transitionRotation,
 	transitionScale,
 } from "./geometry";
-import * as math from "./math";
-import { epsilon } from "./math";
+import * as math from "./linalg";
 import { ensureCornerWalls } from "./plan";
 import { getSideCorners, getTileCorners } from "./topology";
 import type { Plan, Point, ShapeSide } from "./types";
-import { point } from "./types";
+import { point, segment } from "./types";
 
 export { transitionPosition } from "./geometry";
+
+const epsilon = 1e-5;
+
+export function isInsideTile(position: Point, shape: Point): boolean {
+	if (position.y < -epsilon || position.y > shape.y + epsilon) {
+		return false;
+	}
+	const min = (shape.x * position.y) / shape.y;
+	const max = min + 1 - position.y / shape.y;
+	return position.x >= min - epsilon && position.x <= max + epsilon;
+}
 
 export default class Physics {
 	currentTileId = 0;
@@ -40,7 +49,7 @@ export default class Physics {
 			const collisionEdge =
 				side === undefined
 					? getInsetEdge(sideStart, sideEnd, avatarRadiusWorld)
-					: { start: sideStart, end: sideEnd };
+					: segment(sideStart, sideEnd);
 			if (math.isClockwise3(collisionEdge.start, collisionEdge.end, next)) {
 				const { x: edgePosition, y: movePosition } = math.intersect(
 					collisionEdge.start,
@@ -66,7 +75,7 @@ export default class Physics {
 							collisionEdge.end,
 							edgePosition,
 						);
-						const reflectedDelta = math.project3(
+						const reflectedDelta = math.projectOffset(
 							collisionEdge.start,
 							wallIntersection,
 							next,
@@ -139,7 +148,7 @@ export default class Physics {
 			}
 			const corner = corners[cornerIndex];
 			let delta = math.sub(this.position, corner);
-			const distance = math.size(delta);
+			const distance = Math.sqrt(math.lengthSq(delta));
 			if (distance < epsilon) {
 				const outward = point(0.0, 1.0);
 				this.position = math.add(
@@ -213,13 +222,12 @@ export default class Physics {
 	}
 
 	simulateMove(delta: Point): void {
-		if (math.isZero(delta)) return;
 		const previousCurrentTileId = this.currentTileId;
 		const previousPosition = point(this.position.x, this.position.y);
 		const previousRotation = this.rotation;
 		const previousScale = this.scale;
-		const sin = math.sinTurns(this.rotation);
-		const cos = math.cosTurns(this.rotation);
+		const sin = Math.sin(this.rotation * Math.PI * 2);
+		const cos = Math.cos(this.rotation * Math.PI * 2);
 		const next = point(
 			this.position.x + (cos * delta.x + sin * delta.y) / this.scale,
 			this.position.y + (-sin * delta.x + cos * delta.y) / this.scale,

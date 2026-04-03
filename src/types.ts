@@ -18,14 +18,6 @@ export interface Color {
 	a: number;
 }
 
-export function color(r: number, g: number, b: number, a = 1): Color {
-	assert(Number.isFinite(r) && r >= 0 && r <= 1, "Invalid color r", r);
-	assert(Number.isFinite(g) && g >= 0 && g <= 1, "Invalid color g", g);
-	assert(Number.isFinite(b) && b >= 0 && b <= 1, "Invalid color b", b);
-	assert(Number.isFinite(a) && a >= 0 && a <= 1, "Invalid color a", a);
-	return { r, g, b, a };
-}
-
 export interface Side {
 	tileId: number;
 	neighbor: number;
@@ -86,6 +78,10 @@ export interface Segment {
 	end: Point;
 }
 
+export function segment(start: Point, end: Point): Segment {
+	return { start, end };
+}
+
 export interface CornerWall {
 	left?: Point;
 	right?: Point;
@@ -94,10 +90,8 @@ export interface CornerWall {
 export interface RenderStats {
 	tiles: number;
 	branches: number;
-	avatars: number;
 	maxDepth: number;
-	renderDuration: number;
+	duration: number;
 }
 
 export type MouseAction = "down" | "up" | "move" | "drag" | "out";
-export type RenderType = "none" | "wall" | "corner";

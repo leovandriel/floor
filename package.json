@@ -12,13 +12,13 @@
 		"watch": "webpack --watch",
 		"start": "npm run dev",
 		"test": "node --import tsx --test test/*.test.ts",
-		"typecheck": "tsc --noEmit -p test/tsconfig.json",
+		"typecheck": "tsc --noEmit --project test/tsconfig.json",
 		"lint": "biome check .",
 		"check": "npm run lint && npm run typecheck && npm run test && npm run build",
 		"format": "biome format --write .",
 		"format:check": "biome format --check .",
 		"update:deps": "npm update --save",
-		"update:deps:latest": "npx npm-check-updates -u && npm install"
+		"update:deps:latest": "npx npm-check-updates --upgrade && npm install"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.10",

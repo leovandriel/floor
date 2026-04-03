@@ -3,7 +3,8 @@ import test from "node:test";
 import {
 	getInsetEdge,
 	getInwardNormal,
-	isInsideTile,
+	reflect1X,
+	reflectY,
 	shiftPosition,
 	shiftRotation,
 	shiftScale,
@@ -15,7 +16,7 @@ import {
 	unshiftPosition,
 	unshiftRotation,
 } from "../src/geometry";
-import * as math from "../src/math";
+import * as math from "../src/linalg";
 import { point } from "../src/types";
 
 function assertPointClose(
@@ -155,7 +156,7 @@ test("getInwardNormal points into the tile interior", () => {
 	const inwardNormal = getInwardNormal(sideStart, sideEnd);
 
 	assert.ok(math.dot(inwardNormal, point(0.5, 0.5)) > 0);
-	assert.ok(Math.abs(math.size(inwardNormal) - 1.0) < 1e-9);
+	assert.ok(Math.abs(Math.sqrt(math.lengthSq(inwardNormal)) - 1.0) < 1e-9);
 });
 
 test("getInsetEdge moves an edge inward by the requested distance", () => {
@@ -165,10 +166,7 @@ test("getInsetEdge moves an edge inward by the requested distance", () => {
 	assertPointClose(insetEdge.end, point(0.0, 0.1));
 });
 
-test("isInsideTile accepts interior points and rejects exterior points", () => {
-	const shape = point(0.5, 0.5);
-
-	assert.equal(isInsideTile(point(0.5, 0.1), shape), true);
-	assert.equal(isInsideTile(point(-0.1, 0.1), shape), false);
-	assert.equal(isInsideTile(point(0.5, 0.6), shape), false);
+test("reflect helpers mirror the expected axis", () => {
+	assert.deepEqual(reflect1X(point(0.2, 0.3)), point(0.8, 0.3));
+	assert.deepEqual(reflectY(point(0.2, 0.3)), point(0.2, -0.3));
 });

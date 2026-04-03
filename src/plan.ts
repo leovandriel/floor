@@ -1,17 +1,19 @@
 import assert from "./assert";
 import { getSideDirectionAtCorner, transitionDirection } from "./geometry";
 import { library } from "./library";
-import { epsilon } from "./math";
+import { cross, lengthSq, sub } from "./linalg";
 import {
 	getCornerAcrossSide,
 	getIncidentSides,
 	getOtherIncidentSide,
+	getTileCorners,
 } from "./topology";
 import type { CornerWall, Plan, Point, Tile } from "./types";
 
 const maxPlanValidationDepth = 100;
 const maxPlanValidationCount = 1000;
 const maxCornerWallDepth = 10;
+const epsilon = 1e-5;
 
 function tryGetTile(plan: Plan, id: number): Tile | undefined {
 	try {
@@ -21,20 +23,16 @@ function tryGetTile(plan: Plan, id: number): Tile | undefined {
 	}
 }
 
+function angleSinSq(a: Point, b: Point): number {
+	const area = cross(a, b);
+	return (area * area) / (lengthSq(a) * lengthSq(b));
+}
+
 export function getPlanBySlug(slug: string): Plan | undefined {
 	return library.find((plan) => plan.slug === slug);
 }
 
-export function getValidPlan(slug: string): Plan | undefined {
-	const plan = getPlanBySlug(slug);
-	if (!plan) {
-		return undefined;
-	}
-	checkPlan(plan);
-	return plan;
-}
-
-export function checkPlan(plan: Plan): void {
+export function assertValidPlan(plan: Plan): void {
 	const root = tryGetTile(plan, 0);
 	assert(root, "Missing root tile", 0);
 	const visited = new Set<number>();
@@ -52,8 +50,23 @@ export function checkPlan(plan: Plan): void {
 		const tile = tryGetTile(plan, id);
 		assert(tile, "Missing tile", id);
 		const { shape, sides } = tile;
-		assert(shape.y >= -1e-5, "Flipped tile", id);
-		assert(shape.y >= 1e-5, "Flat tile", id);
+		assert(shape.y >= 0, "Flipped tile", id);
+		const [left, top, right] = getTileCorners(shape);
+		assert(
+			angleSinSq(sub(right, left), sub(top, left)) >= epsilon,
+			"Flat tile",
+			id,
+		);
+		assert(
+			angleSinSq(sub(left, top), sub(right, top)) >= epsilon,
+			"Flat tile",
+			id,
+		);
+		assert(
+			angleSinSq(sub(left, right), sub(top, right)) >= epsilon,
+			"Flat tile",
+			id,
+		);
 		for (let j = 0; j < 3; j++) {
 			const side = sides[j];
 			if (!side) {
@@ -195,12 +208,7 @@ export function ensureCornerWalls(
 			);
 		}
 		const [left, right] = directions;
-		if (
-			(left || right) &&
-			(!left ||
-				!right ||
-				Math.abs(left.x * right.y - left.y * right.x) > epsilon)
-		) {
+		if (left || right) {
 			walls[cornerIndex] = { left, right };
 		}
 	}

@@ -3,12 +3,13 @@ import Control, { type Command } from "./control";
 import Input from "./input";
 import { library } from "./library";
 import Physics from "./physics";
-import { getValidPlan } from "./plan";
+import { getPlanBySlug } from "./plan";
 import Renderer from "./render";
 import type { Plan } from "./types";
-import { color } from "./types";
 import UI, { getCanvas, renderError } from "./ui";
 import { readUrlState, type UrlState, UrlStateTracker } from "./url";
+import View from "./view";
+import WebGLRenderer from "./webgl";
 
 declare const __DEV__: boolean;
 
@@ -16,7 +17,10 @@ const isDev = typeof __DEV__ !== "undefined" && __DEV__;
 
 export default class App {
 	context: CanvasRenderingContext2D;
-	canvas!: Canvas;
+	private readonly webglCanvasElement: HTMLCanvasElement | undefined;
+	private readonly webglRenderer: WebGLRenderer | undefined;
+	view!: View;
+	canvasRenderer!: Canvas;
 	physics!: Physics;
 	renderer!: Renderer;
 	plan: Plan;
@@ -25,30 +29,46 @@ export default class App {
 	input!: Input;
 	private readonly ui = new UI(isDev);
 
-	constructor(context: CanvasRenderingContext2D, plan: Plan) {
+	constructor(
+		context: CanvasRenderingContext2D,
+		plan: Plan,
+		webglCanvasElement: HTMLCanvasElement | undefined,
+		webglRenderer: WebGLRenderer | undefined,
+	) {
 		this.context = context;
 		this.plan = plan;
+		this.webglCanvasElement = webglCanvasElement;
+		this.webglRenderer = webglRenderer;
 	}
 
 	static load(): void {
 		const canvasElement = getCanvas();
 		if (!canvasElement) return;
+		const webglCanvasElement = getCanvas("canvas-webgl");
+		if (!webglCanvasElement) return;
 		const context = canvasElement.getContext?.("2d");
 		if (!context) {
 			canvasElement.remove();
 			renderError(["Your browser does not support canvas rendering."]);
 			return;
 		}
+		const webglContext = webglCanvasElement.getContext("webgl2") ?? undefined;
 		const urlState = readUrlState();
-		const plan = getValidPlan(urlState.path.slug);
+		const plan = getPlanBySlug(urlState.path.slug);
 		if (!plan) {
 			renderError([`Unknown plan: ${urlState.path.slug}`]);
 			return;
 		}
-		const app = new App(context, plan);
+		const app = new App(
+			context,
+			plan,
+			webglCanvasElement,
+			webglContext ? new WebGLRenderer(webglContext) : undefined,
+		);
 		app.initializeState();
 		app.applyUrlState(urlState);
 		app.ui.init((command) => app.applyCommand(command));
+		app.syncRendererBackend();
 		app.renderer.render();
 		app.syncControls();
 		app.attachHandlers();
@@ -63,7 +83,10 @@ export default class App {
 	}
 
 	handleResize(): void {
-		this.canvas.resizeToWindow();
+		this.view.resizeToWindow();
+		this.canvasRenderer.resize(this.view.size);
+		this.resizeWebGLCanvas();
+		this.syncRendererBackend();
 		this.renderer.render();
 		this.syncControls();
 	}
@@ -109,6 +132,7 @@ export default class App {
 			default:
 				switch (this.control.applyCommand(command)) {
 					case "render":
+						this.syncRendererBackend();
 						this.renderer.render();
 						return;
 					case "render-and-sync":
@@ -121,6 +145,7 @@ export default class App {
 	}
 
 	private renderAndSync(scheduleUrlUpdate = false): void {
+		this.syncRendererBackend();
 		this.renderer.render();
 		this.syncControls();
 		if (scheduleUrlUpdate) {
@@ -134,6 +159,7 @@ export default class App {
 
 	private restoreLocationState(): void {
 		this.applyUrlState(readUrlState());
+		this.syncRendererBackend();
 		this.renderer.render();
 		this.syncControls();
 	}
@@ -154,9 +180,7 @@ export default class App {
 		if (slug === this.plan.slug) {
 			return;
 		}
-
-		const debug = this.renderer.debug;
-		const nextPlan = getValidPlan(slug);
+		const nextPlan = getPlanBySlug(slug);
 		if (!nextPlan) {
 			renderError([`Unknown plan: ${slug}`]);
 			this.syncControls();
@@ -166,7 +190,7 @@ export default class App {
 		this.plan = nextPlan;
 		this.input.clear();
 		this.initializeState();
-		this.renderer.debug = debug;
+		this.syncRendererBackend();
 		this.renderer.render();
 		this.syncControls();
 		this.urlState.updateUrl();
@@ -179,29 +203,42 @@ export default class App {
 	}
 
 	private initializeState(): void {
-		this.canvas = new Canvas(this.context, color(0.8, 0.8, 0.8));
-		this.canvas.resizeToWindow();
+		const debug = this.renderer?.debug ?? false;
+		const webgl = this.renderer?.webgl ?? false;
+		this.view = new View();
+		this.view.resizeToWindow();
+		this.canvasRenderer = new Canvas(this.context, this.view);
+		this.canvasRenderer.resize(this.view.size);
+		this.resizeWebGLCanvas();
 		this.physics = new Physics(this.plan);
-		this.renderer = new Renderer(this.physics, this.canvas);
-		this.input = new Input(this.canvas, this.renderer, (command) =>
+		this.renderer = new Renderer(
+			this.physics,
+			this.canvasRenderer,
+			this.view,
+			this.webglRenderer,
+		);
+		this.renderer.debug = debug;
+		this.renderer.webgl = webgl;
+		this.syncRendererBackend();
+		this.input = new Input(this.view, this.renderer, (command) =>
 			this.applyCommand(command),
 		);
 		this.control = new Control(
-			this.canvas,
+			this.view,
 			this.physics,
 			this.renderer,
 			this.plan,
 		);
 		this.urlState = new UrlStateTracker(
 			this.plan,
-			this.canvas,
+			this.view,
 			this.physics,
 			this.renderer,
 		);
 	}
 
 	private applyUrlState(state: UrlState): void {
-		const plan = getValidPlan(state.path.slug);
+		const plan = getPlanBySlug(state.path.slug);
 		if (!plan) {
 			renderError([`Unknown plan: ${state.path.slug}`]);
 			return;
@@ -215,11 +252,43 @@ export default class App {
 
 	private syncControls(): void {
 		this.ui.sync(
-			this.canvas,
+			this.view,
 			this.physics,
 			this.renderer,
 			this.plan,
 			this.renderer.renderStats,
 		);
+	}
+
+	private resizeWebGLCanvas(): void {
+		if (!this.webglCanvasElement || !this.webglRenderer) {
+			return;
+		}
+		const size = this.view.size;
+		this.webglCanvasElement.width = size.x * 2;
+		this.webglCanvasElement.height = size.y * 2;
+		this.webglCanvasElement.style.width = `${size.x}px`;
+		this.webglCanvasElement.style.height = `${size.y}px`;
+		this.webglRenderer.resize(
+			this.webglCanvasElement.width,
+			this.webglCanvasElement.height,
+		);
+	}
+
+	private syncRendererBackend(): void {
+		if (!this.webglCanvasElement) {
+			return;
+		}
+		this.context.canvas.hidden = false;
+		this.context.canvas.style.display = "block";
+		this.webglCanvasElement.hidden = !this.renderer.webgl;
+		this.webglCanvasElement.style.display = this.renderer.webgl
+			? "block"
+			: "none";
+		if (this.renderer.webgl) {
+			this.canvasRenderer.clear();
+		} else if (this.webglRenderer) {
+			this.webglRenderer.clear(this.renderer.backgroundColor);
+		}
 	}
 }

@@ -1,9 +1,9 @@
-import type Canvas from "./canvas";
 import type Physics from "./physics";
 import { getPlanBySlug } from "./plan";
 import type Renderer from "./render";
 import type { Plan } from "./types";
 import { point } from "./types";
+import type View from "./view";
 
 export interface UrlQueryState {
 	current: number;
@@ -14,6 +14,7 @@ export interface UrlQueryState {
 	factor: number;
 	range: number;
 	debug: boolean;
+	webgl: boolean;
 }
 
 export interface UrlPathState {
@@ -34,6 +35,7 @@ const urlQueryKey = {
 	factor: "f",
 	range: "g",
 	debug: "d",
+	webgl: "w",
 } as const;
 
 const urlUpdateIntervalMs = 100;
@@ -50,6 +52,7 @@ const defaultUrlState: UrlState = {
 		factor: 1,
 		range: 0.5,
 		debug: false,
+		webgl: false,
 	},
 };
 
@@ -117,8 +120,9 @@ export function parseUrlQueryState(
 		defaults.range,
 	);
 	const debug = parseBooleanParam(params, urlQueryKey.debug);
+	const webgl = parseBooleanParam(params, urlQueryKey.webgl);
 
-	return { current, x, y, rotation, scale, factor, range, debug };
+	return { current, x, y, rotation, scale, factor, range, debug, webgl };
 }
 
 export function readUrlQueryState(
@@ -159,7 +163,7 @@ export class UrlStateTracker {
 
 	constructor(
 		private readonly plan: Plan,
-		private readonly canvas: Canvas,
+		private readonly view: View,
 		private readonly physics: Physics,
 		private readonly renderer: Renderer,
 	) {}
@@ -169,9 +173,10 @@ export class UrlStateTracker {
 		this.physics.position = point(query.x, query.y);
 		this.physics.rotation = query.rotation;
 		this.physics.scale = query.scale;
-		this.canvas.factor = query.factor;
-		this.canvas.range = query.range;
+		this.view.factor = query.factor;
+		this.view.range = query.range;
 		this.renderer.debug = query.debug;
+		this.renderer.webgl = query.webgl;
 		this.physics.simulateSnap();
 	}
 
@@ -216,6 +221,7 @@ export class UrlStateTracker {
 			params.delete(urlQueryKey.range);
 		}
 		setBooleanParam(params, urlQueryKey.debug, query.debug);
+		setBooleanParam(params, urlQueryKey.webgl, query.webgl);
 		const nextSearch = params.toString();
 		const nextPath = `/${state.path.slug}`;
 		const nextUrl = `${nextPath}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`;
@@ -258,9 +264,10 @@ export class UrlStateTracker {
 				y: this.physics.position.y,
 				rotation: this.physics.rotation,
 				scale: this.physics.scale,
-				factor: this.canvas.factor,
-				range: this.canvas.range,
+				factor: this.view.factor,
+				range: this.view.range,
 				debug: this.renderer.debug,
+				webgl: this.renderer.webgl,
 			},
 		};
 	}

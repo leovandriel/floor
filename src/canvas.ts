@@ -1,209 +1,86 @@
-import * as math from "./math";
-import type { Color, Point, Segment } from "./types";
-import { color, point } from "./types";
+import { color, colorString, withAlpha } from "./color";
+import type Renderer from "./render";
+import type { RenderBatch } from "./render";
+import type { Color, Point } from "./types";
+import { point } from "./types";
+import type View from "./view";
 
-type GradientCache = Record<string, CanvasGradient>;
-
-function colorString(c: Color): string {
-	return (
-		"#" +
-		[c.r, c.g, c.b, c.a]
-			.map((v) => `0${Math.round(v * 255).toString(16)}`.slice(-2))
-			.join("")
-	);
-}
-
-export function withAlpha(c: Color, a: number): Color {
-	return color(c.r, c.g, c.b, a);
-}
+type DrawMode = "fill" | "stroke" | "both";
+const tileStrokePixels = 0.5;
 
 export default class Canvas {
-	private sizeValue: Point = point(0.0, 0.0);
-	private scaleValue = 1;
-	private factorValue = 1;
-	private rangeValue = 0.5;
+	private readonly context: CanvasRenderingContext2D;
 
-	private backgroundValue: Color;
-	private context: CanvasRenderingContext2D;
-	private mouse: Point | undefined = undefined;
-
-	private gradientCache: GradientCache = {};
-
-	constructor(context: CanvasRenderingContext2D, background: Color) {
+	constructor(
+		context: CanvasRenderingContext2D,
+		private readonly view: View,
+	) {
 		this.context = context;
-		this.backgroundValue = background;
-		this.cache();
 	}
 
-	get range(): number {
-		return this.rangeValue;
-	}
-	get size(): Point {
-		return this.sizeValue;
-	}
-	get factor(): number {
-		return this.factorValue;
-	}
-	get background(): Color {
-		return this.backgroundValue;
-	}
-
-	set factor(factor: number) {
-		this.factorValue = factor;
-		this.cache();
-	}
-
-	set range(range: number) {
-		this.rangeValue = range;
-	}
-
-	zoom(factor: number): void {
-		this.factorValue *= factor;
-		this.cache();
-	}
-
-	warp(range: number): void {
-		this.rangeValue *= range;
-	}
-
-	resizeToWindow(): void {
-		const size = point(window.innerWidth, window.innerHeight);
+	resize(size: Point): void {
 		this.context.canvas.width = size.x * 2;
 		this.context.canvas.height = size.y * 2;
 		this.context.canvas.style.width = `${size.x}px`;
 		this.context.canvas.style.height = `${size.y}px`;
 		this.context.setTransform(2, 0, 0, 2, 0, 0);
-		this.sizeValue = size;
-		this.cache();
-	}
-
-	setSize(size: Point): void {
-		this.sizeValue = size;
-		this.cache();
-	}
-
-	setMouse(mouse: Point | undefined): void {
-		this.mouse = mouse;
-	}
-
-	private cache(): void {
-		this.scaleValue =
-			(this.factorValue * Math.max(this.sizeValue.x, this.sizeValue.y)) / 2;
-		this.gradientCache = {};
-	}
-
-	private createGradient(c: Color): CanvasGradient {
-		const gradient = this.context.createRadialGradient(
-			this.sizeValue.x / 2,
-			this.sizeValue.y / 2,
-			0,
-			this.sizeValue.x / 2,
-			this.sizeValue.y / 2,
-			this.scaleValue,
-		);
-		gradient.addColorStop(0, colorString(c));
-		gradient.addColorStop(1, colorString(this.backgroundValue));
-		return gradient;
-	}
-
-	private getGradient(c: Color): CanvasGradient {
-		const key = colorString(c);
-		const cachedGradient = this.gradientCache[key];
-		if (cachedGradient) {
-			return cachedGradient;
-		}
-
-		const gradient = this.createGradient(c);
-		this.gradientCache[key] = gradient;
-		return gradient;
-	}
-
-	private interpolate(p: Color, q: Color, t: number): Color {
-		return color(
-			Math.round((p.r * (1 - t) + q.r * t) * 100) / 100,
-			Math.round((p.g * (1 - t) + q.g * t) * 100) / 100,
-			Math.round((p.b * (1 - t) + q.b * t) * 100) / 100,
-			Math.round((p.a * (1 - t) + q.a * t) * 100) / 100,
-		);
 	}
 
 	setWidth(width: number): void {
-		this.context.lineWidth = (width * this.scaleValue) / this.rangeValue / 1000;
+		this.context.lineWidth = (width * this.view.scale) / this.view.range / 1000;
+	}
+
+	setPixelWidth(width: number): void {
+		this.context.lineWidth = width;
 	}
 
 	private transform(p: Point): [number, number] {
 		return [
-			this.sizeValue.x / 2 + p.x * this.scaleValue,
-			this.sizeValue.y / 2 - p.y * this.scaleValue,
+			this.view.size.x / 2 + p.x * this.view.scale,
+			this.view.size.y / 2 - p.y * this.view.scale,
 		];
 	}
 
-	setColor(c: Color, vertical?: Point): void {
-		if (vertical) {
-			const length = Math.min(math.size(vertical), 1);
-			const c2 = colorString(this.interpolate(c, this.backgroundValue, length));
-			this.context.fillStyle = c2;
-			this.context.strokeStyle = c2;
-		} else {
-			const gradient = this.getGradient(c);
-			this.context.fillStyle = gradient;
-			this.context.strokeStyle = gradient;
-		}
+	setColor(c: Color): void {
+		const c2 = colorString(c);
+		this.context.fillStyle = c2;
+		this.context.strokeStyle = c2;
 	}
 
-	drawPath(path: Point[], fill?: boolean): void {
+	drawPath(path: Point[], mode: DrawMode): void {
 		this.context.beginPath();
 		this.context.moveTo(...this.transform(path[0]));
 		for (let i = 1; i < path.length; i++) {
 			this.context.lineTo(...this.transform(path[i]));
 		}
 		this.context.closePath();
-		if (fill) {
+		if (mode === "fill" || mode === "both") {
 			this.context.fill();
-		} else {
+		}
+		if (mode === "stroke" || mode === "both") {
 			this.context.stroke();
 		}
 	}
 
-	drawLine(a: Point, b: Point): void {
-		this.context.beginPath();
-		this.context.moveTo(...this.transform(a));
-		this.context.lineTo(...this.transform(b));
-		this.context.stroke();
-	}
-
-	drawDouble(segment: Segment, _width: number): void {
-		const { start: a, end: b } = segment;
-		this.context.beginPath();
-		const length =
-			Math.sqrt(math.pointDistanceSq(a, b)) * 300 * this.rangeValue;
-		const p = point((b.y - a.y) / length, (a.x - b.x) / length);
-		this.context.moveTo(...this.transform(point(a.x + p.x, a.y + p.y)));
-		this.context.lineTo(...this.transform(point(a.x - p.x, a.y - p.y)));
-		this.context.lineTo(...this.transform(point(b.x - p.x, b.y - p.y)));
-		this.context.lineTo(...this.transform(point(b.x + p.x, b.y + p.y)));
-		this.context.closePath();
-		this.context.stroke();
-	}
-
-	drawCircle(a: Point, r: number, fill?: boolean): void {
+	drawCircle(a: Point, r: number, mode: DrawMode): void {
 		this.context.beginPath();
 		this.context.arc(
 			...this.transform(a),
-			(r / this.rangeValue) * this.scaleValue,
+			(r / this.view.range) * this.view.scale,
 			0,
 			Math.PI * 2,
 		);
-		if (fill) {
+		if (mode === "fill" || mode === "both") {
 			this.context.fill();
-		} else {
+		}
+		if (mode === "stroke" || mode === "both") {
 			this.context.stroke();
 		}
 	}
 
 	drawText(a: Point, text: string): void {
 		this.context.save();
-		this.context.font = `${Math.max(this.scaleValue / 54, 8)}px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace`;
+		this.context.font = `${Math.max(this.view.scale / 54, 8)}px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace`;
 		this.context.textAlign = "center";
 		this.context.textBaseline = "middle";
 		this.context.fillText(text, ...this.transform(a));
@@ -214,19 +91,58 @@ export default class Canvas {
 		this.context.fillRect(p.x, p.y, q.x, q.y);
 	}
 
-	untransform(p: Point): Point {
-		return point(
-			(p.x - this.sizeValue.x / 2) / this.scaleValue,
-			(this.sizeValue.y / 2 - p.y) / this.scaleValue,
+	clear(): void {
+		this.context.clearRect(
+			0,
+			0,
+			this.context.canvas.width,
+			this.context.canvas.height,
 		);
 	}
 
-	unscale(p: Point): Point {
-		return point(p.x / this.scaleValue, p.y / -this.scaleValue);
+	drawBackground(c: Color): void {
+		this.setColor(c);
+		this.drawRect(point(0.0, 0.0), this.view.size);
 	}
 
-	getMouse(): Point | undefined {
-		if (!this.mouse) return undefined;
-		return this.untransform(this.mouse);
+	draw(batch: RenderBatch, renderer: Renderer): void {
+		this.drawBackground(renderer.backgroundColor);
+		this.drawTiles(batch);
+		this.drawWalls(batch);
+		this.drawAvatars(batch, renderer);
+		this.drawLabels(batch, renderer);
+	}
+
+	drawTiles(batch: RenderBatch): void {
+		for (const tile of batch.tiles) {
+			this.setColor(tile.color);
+			this.setPixelWidth(tileStrokePixels);
+			this.drawPath(tile.polygon, "both");
+		}
+	}
+
+	drawWalls(batch: RenderBatch): void {
+		for (const wall of batch.walls) {
+			this.setColor(wall.color);
+			this.setPixelWidth(tileStrokePixels);
+			this.drawPath(wall.quad, "both");
+		}
+	}
+
+	drawAvatars(batch: RenderBatch, renderer: Renderer): void {
+		for (const avatar of batch.avatars) {
+			this.setColor(avatar.faded ? color(0.6, 0.6, 0.6) : renderer.avatarColor);
+			this.drawCircle(avatar.position, renderer.avatarRadius, "fill");
+		}
+	}
+
+	drawLabels(batch: RenderBatch, renderer: Renderer): void {
+		for (const tile of batch.tiles) {
+			if (!tile.label || !tile.labelPosition) {
+				continue;
+			}
+			this.setColor(withAlpha(renderer.wallColor, 0.45));
+			this.drawText(tile.labelPosition, tile.label);
+		}
 	}
 }

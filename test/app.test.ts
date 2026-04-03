@@ -46,7 +46,7 @@ function createAppHarness() {
 	if (!plan) {
 		throw new Error(`Missing default plan: ${defaultPlanSlug}`);
 	}
-	const app = new App(createContext(), plan);
+	const app = new App(createContext(), plan, undefined, undefined);
 	const appHarness = app as unknown as {
 		input: {
 			handleMouse(
@@ -59,7 +59,6 @@ function createAppHarness() {
 		syncControls: () => void;
 		scheduleUrlStateUpdate: () => void;
 	};
-	let lastMouse = point(NaN, NaN);
 	const moves: Array<{ x: number; y: number }> = [];
 	app.physics = {
 		simulateMove(delta: { x: number; y: number }) {
@@ -71,36 +70,31 @@ function createAppHarness() {
 			return {
 				tiles: 0,
 				branches: 0,
-				avatars: 0,
 				maxDepth: 0,
-				renderDuration: 0,
+				duration: 0,
 			};
 		},
 	} as never;
-	app.canvas = {
+	app.canvasRenderer = {} as never;
+	app.view = {
 		range: 2,
-		unscale(delta: { x: number; y: number }) {
-			return delta;
-		},
-		setMouse(mouse: { x: number; y: number } | undefined) {
-			lastMouse = mouse ? point(mouse.x, mouse.y) : point(NaN, NaN);
-		},
+		scale: 1,
 	} as never;
-	app.input = new Input(app.canvas, app.renderer, (command) =>
+	app.input = new Input(app.view, app.renderer, (command) =>
 		(app as unknown as { applyCommand(command: unknown): void }).applyCommand(
 			command,
 		),
 	);
-	app.control = new Control(app.canvas, app.physics, app.renderer, plan);
+	app.control = new Control(app.view, app.physics, app.renderer, plan);
 	appHarness.recordRenderStats = () => {};
 	appHarness.syncControls = () => {};
 	appHarness.scheduleUrlStateUpdate = () => {};
 
-	return { app, moves, getLastMouse: () => lastMouse };
+	return { app, moves };
 }
 
-test("handleMouse uses client coordinates for hover state", () => {
-	const { app, getLastMouse } = createAppHarness();
+test("handleMouse ignores move events when not dragging", () => {
+	const { app, moves } = createAppHarness();
 	const { input } = app as unknown as {
 		input: {
 			handleMouse(
@@ -120,7 +114,7 @@ test("handleMouse uses client coordinates for hover state", () => {
 		"move",
 	);
 
-	assert.deepEqual(getLastMouse(), point(25.0, 40.0));
+	assert.deepEqual(moves, []);
 });
 
 test("handleMouse clears stale drag state when buttons are released", () => {
@@ -154,9 +148,7 @@ test("handleMouse emits drag-mouse even when a corner is hovered", () => {
 	const input = new Input(
 		{
 			range: 2,
-			unscale(delta: { x: number; y: number }) {
-				return delta;
-			},
+			scale: 1,
 		} as never,
 		{
 			hoveredCorner: {
@@ -179,7 +171,7 @@ test("handleMouse emits drag-mouse even when a corner is hovered", () => {
 
 	assert.deepEqual(commands[commands.length - 1], {
 		type: "drag-mouse",
-		delta: point(-12.0, 12.0),
+		delta: point(-12.0, -12.0),
 	});
 });
 
@@ -204,7 +196,7 @@ test("KeyP selects the next plan with wraparound", () => {
 	if (!lastPlan) {
 		throw new Error("Expected at least one plan");
 	}
-	const app = new App(createContext(), lastPlan);
+	const app = new App(createContext(), lastPlan, undefined, undefined);
 	const appPrivate = app as unknown as {
 		applyCommand(command: unknown): void;
 		handlePlanSelection(slug: string): void;
@@ -231,7 +223,7 @@ test("KeyO selects the previous plan with wraparound", () => {
 	if (!lastPlan) {
 		throw new Error("Expected at least one plan");
 	}
-	const app = new App(createContext(), firstPlan);
+	const app = new App(createContext(), firstPlan, undefined, undefined);
 	const appPrivate = app as unknown as {
 		applyCommand(command: unknown): void;
 		handlePlanSelection(slug: string): void;

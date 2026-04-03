@@ -1,20 +1,34 @@
 import {
 	add,
-	atan2Turns,
-	dotCross,
-	epsilon,
+	cross,
+	div,
+	dot,
+	lengthSq,
 	mul,
 	neg,
-	norm,
 	normSq,
-	reflect1X,
-	reflectY,
 	rotateRight,
-	size,
 	sub,
-} from "./math";
+} from "./linalg";
 import { getSideCorners, getTileCorners } from "./topology";
 import type { Point, Segment, ShapeSide } from "./types";
+import { point } from "./types";
+
+export function dotCross(a: Point, b: Point): Point {
+	return point(dot(a, b), cross(a, b));
+}
+
+export function reflect1X(v: Point): Point {
+	return point(1 - v.x, v.y);
+}
+
+export function reflectY(v: Point): Point {
+	return point(v.x, -v.y);
+}
+
+export function shiftCorner(p: Point, q: Point, shape: Point): Point {
+	return add(p, dotCross(reflectY(shape), sub(q, p)));
+}
 
 export function shiftPosition(
 	position: Point,
@@ -109,9 +123,9 @@ export function shiftScale({ shape, index }: ShapeSide): number {
 		case 0:
 			return 1;
 		case 1:
-			return size(shape);
+			return Math.sqrt(lengthSq(shape));
 		case 2:
-			return size(reflect1X(shape));
+			return Math.sqrt(lengthSq(reflect1X(shape)));
 	}
 	return 1;
 }
@@ -125,9 +139,13 @@ export function shiftRotation(side: ShapeSide): number {
 		case 0:
 			return 0;
 		case 1:
-			return atan2Turns(side.shape) - 0.5;
+			return Math.atan2(side.shape.y, side.shape.x) / (Math.PI * 2) - 0.5;
 		case 2:
-			return -atan2Turns(reflect1X(side.shape)) + 0.5;
+			return (
+				-Math.atan2(reflect1X(side.shape).y, reflect1X(side.shape).x) /
+					(Math.PI * 2) +
+				0.5
+			);
 	}
 	return 0;
 }
@@ -137,9 +155,13 @@ export function unshiftRotation(side: ShapeSide): number {
 		case 0:
 			return 0;
 		case 1:
-			return -atan2Turns(side.shape) + 0.5;
+			return -Math.atan2(side.shape.y, side.shape.x) / (Math.PI * 2) + 0.5;
 		case 2:
-			return atan2Turns(reflect1X(side.shape)) - 0.5;
+			return (
+				Math.atan2(reflect1X(side.shape).y, reflect1X(side.shape).x) /
+					(Math.PI * 2) -
+				0.5
+			);
 	}
 	return 0;
 }
@@ -149,7 +171,8 @@ export function transitionRotation(from: ShapeSide, to: ShapeSide): number {
 }
 
 export function getInwardNormal(sideStart: Point, sideEnd: Point): Point {
-	return rotateRight(norm(sub(sideEnd, sideStart)));
+	const edge = sub(sideEnd, sideStart);
+	return rotateRight(div(edge, Math.sqrt(lengthSq(edge))));
 }
 
 export function getInsetEdge(
@@ -175,13 +198,4 @@ export function getSideDirectionAtCorner(
 	const sideEnd = corners[sideEndIndex];
 	const otherCorner = cornerIndex === sideStartIndex ? sideEnd : sideStart;
 	return sub(otherCorner, corners[cornerIndex]);
-}
-
-export function isInsideTile(position: Point, shape: Point): boolean {
-	if (position.y < -epsilon || position.y > shape.y + epsilon) {
-		return false;
-	}
-	const min = (shape.x * position.y) / shape.y;
-	const max = min + 1 - position.y / shape.y;
-	return position.x >= min - epsilon && position.x <= max + epsilon;
 }

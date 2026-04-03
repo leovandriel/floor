@@ -1,11 +1,11 @@
 import assert from "./assert";
-import type Canvas from "./canvas";
 import type { Command, ControlCommand, SetNumberCommand } from "./control";
 import { library } from "./library";
 import type Physics from "./physics";
 import type Renderer from "./render";
 import type { Plan, RenderStats } from "./types";
 import { formatStateNumber } from "./url";
+import type View from "./view";
 
 function titleCase(value: string): string {
 	return value.slice(0, 1).toUpperCase() + value.slice(1);
@@ -20,10 +20,10 @@ function getRequiredElement<T extends HTMLElement>(
 	return element;
 }
 
-export function getCanvas(): HTMLCanvasElement | undefined {
-	const canvas = document.getElementById("canvas");
+export function getCanvas(id = "canvas"): HTMLCanvasElement | undefined {
+	const canvas = document.getElementById(id);
 	if (!(canvas instanceof HTMLCanvasElement)) {
-		renderError(["Missing canvas element."]);
+		renderError([`Missing ${id} element.`]);
 		return undefined;
 	}
 	return canvas;
@@ -65,6 +65,7 @@ export default class UI {
 	private factorInput!: HTMLInputElement;
 	private rangeInput!: HTMLInputElement;
 	private debugInput!: HTMLInputElement;
+	private webglInput!: HTMLInputElement;
 	private tilesOutput!: HTMLInputElement;
 	private depthOutput!: HTMLInputElement;
 	private branchesOutput!: HTMLInputElement;
@@ -95,6 +96,7 @@ export default class UI {
 		this.factorInput = getRequiredElement("state-factor", HTMLInputElement);
 		this.rangeInput = getRequiredElement("state-range", HTMLInputElement);
 		this.debugInput = getRequiredElement("toggle-debug", HTMLInputElement);
+		this.webglInput = getRequiredElement("toggle-webgl", HTMLInputElement);
 		this.tilesOutput = getRequiredElement("stats-tiles", HTMLInputElement);
 		this.depthOutput = getRequiredElement("stats-depth", HTMLInputElement);
 		this.branchesOutput = getRequiredElement(
@@ -114,7 +116,7 @@ export default class UI {
 	}
 
 	sync(
-		canvas: Canvas,
+		view: View,
 		physics: Physics,
 		renderer: Renderer,
 		plan: Plan,
@@ -131,15 +133,17 @@ export default class UI {
 		this.yInput.value = formatStateNumber(physics.position.y);
 		this.rotationInput.value = formatStateNumber(physics.rotation);
 		this.scaleInput.value = formatStateNumber(physics.scale);
-		this.factorInput.value = formatStateNumber(canvas.factor);
-		this.rangeInput.value = formatStateNumber(canvas.range);
+		this.factorInput.value = formatStateNumber(view.factor);
+		this.rangeInput.value = formatStateNumber(view.range);
 		this.debugInput.checked = renderer.debug;
+		this.webglInput.checked = renderer.webgl;
+		this.webglInput.disabled = !renderer.webglAvailable;
 		this.tilesOutput.value = String(stats?.tiles ?? 0);
 		this.depthOutput.value = String(stats?.maxDepth ?? 0);
 		this.branchesOutput.value = String(stats?.branches ?? 0);
 		this.fpsOutput.value =
-			stats && stats.renderDuration > 0
-				? String(Math.round(1 / stats.renderDuration))
+			stats && stats.duration > 0
+				? String(Math.round(1 / stats.duration))
 				: "0";
 	}
 
@@ -220,6 +224,12 @@ export default class UI {
 
 		if (target.dataset.toggle === "debug") {
 			onCommand({ type: "set-debug", value: target.checked });
+			this.blurFocus();
+			return;
+		}
+
+		if (target.dataset.toggle === "webgl") {
+			onCommand({ type: "set-webgl", value: target.checked });
 			this.blurFocus();
 		}
 	}

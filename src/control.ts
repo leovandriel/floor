@@ -1,9 +1,9 @@
-import type Canvas from "./canvas";
-import * as math from "./math";
+import * as math from "./linalg";
 import type Physics from "./physics";
 import type Renderer from "./render";
 import type { Plan, Point } from "./types";
 import { point } from "./types";
+import type View from "./view";
 
 export type ControlCommand =
 	| "turn-left"
@@ -31,9 +31,9 @@ export type SetNumberCommand =
 export type ControlAction =
 	| { type: ControlCommand; deltaSeconds?: number }
 	| { type: "drag-mouse"; delta: Point }
-	| { type: "move-mouse"; mouse: Point | undefined }
 	| { type: SetNumberCommand; value: number }
-	| { type: "set-debug"; value: boolean };
+	| { type: "set-debug"; value: boolean }
+	| { type: "set-webgl"; value: boolean };
 
 export type Command =
 	| ControlAction
@@ -47,9 +47,13 @@ const angularVelocity = 0.3;
 
 export type ControlResult = "render" | "render-and-sync" | "unhandled";
 
+function noise(): number {
+	return (2 * Math.random() - 1) * 1e-3;
+}
+
 export default class Control {
 	constructor(
-		private readonly canvas: Canvas,
+		private readonly view: View,
 		private readonly physics: Physics,
 		private readonly renderer: Renderer,
 		private readonly plan: Plan,
@@ -73,11 +77,7 @@ export default class Control {
 				return "render-and-sync";
 			case "drag-mouse":
 				this.physics.simulateMove(command.delta);
-				this.canvas.setMouse(undefined);
 				return "render-and-sync";
-			case "move-mouse":
-				this.canvas.setMouse(command.mouse);
-				return "render";
 			case "set-current":
 			case "set-x":
 			case "set-y":
@@ -89,6 +89,9 @@ export default class Control {
 			case "set-debug":
 				this.renderer.debug = command.value;
 				return "render-and-sync";
+			case "set-webgl":
+				this.renderer.webgl = command.value;
+				return "render-and-sync";
 		}
 	}
 
@@ -99,44 +102,32 @@ export default class Control {
 		switch (command) {
 			case "turn-left":
 				this.physics.simulateTurn(
-					(-1 + math.noise()) * angularVelocity * deltaSeconds,
+					(-1 + noise()) * angularVelocity * deltaSeconds,
 				);
 				break;
 			case "turn-right":
 				this.physics.simulateTurn(
-					(1 + math.noise()) * angularVelocity * deltaSeconds,
+					(1 + noise()) * angularVelocity * deltaSeconds,
 				);
 				break;
 			case "move-forward":
 				this.physics.simulateMove(
-					math.mul(
-						point(math.noise(), 1 + math.noise()),
-						linearVelocity * deltaSeconds,
-					),
+					math.mul(point(noise(), 1 + noise()), linearVelocity * deltaSeconds),
 				);
 				break;
 			case "move-backward":
 				this.physics.simulateMove(
-					math.mul(
-						point(math.noise(), -1 + math.noise()),
-						linearVelocity * deltaSeconds,
-					),
+					math.mul(point(noise(), -1 + noise()), linearVelocity * deltaSeconds),
 				);
 				break;
 			case "move-left":
 				this.physics.simulateMove(
-					math.mul(
-						point(-1 + math.noise(), math.noise()),
-						linearVelocity * deltaSeconds,
-					),
+					math.mul(point(-1 + noise(), noise()), linearVelocity * deltaSeconds),
 				);
 				break;
 			case "move-right":
 				this.physics.simulateMove(
-					math.mul(
-						point(1 + math.noise(), math.noise()),
-						linearVelocity * deltaSeconds,
-					),
+					math.mul(point(1 + noise(), noise()), linearVelocity * deltaSeconds),
 				);
 				break;
 			case "scale-up":
@@ -146,16 +137,16 @@ export default class Control {
 				this.physics.scale /= 2 ** deltaSeconds;
 				break;
 			case "zoom-in":
-				this.canvas.zoom(2 ** deltaSeconds);
+				this.view.zoom(2 ** deltaSeconds);
 				break;
 			case "zoom-out":
-				this.canvas.zoom(1 / 2 ** deltaSeconds);
+				this.view.zoom(1 / 2 ** deltaSeconds);
 				break;
 			case "warp-in":
-				this.canvas.warp(1 / 2 ** deltaSeconds);
+				this.view.warp(1 / 2 ** deltaSeconds);
 				break;
 			case "warp-out":
-				this.canvas.warp(2 ** deltaSeconds);
+				this.view.warp(2 ** deltaSeconds);
 				break;
 		}
 	}
@@ -189,13 +180,13 @@ export default class Control {
 				if (command.value <= 0) {
 					return "render-and-sync";
 				}
-				this.canvas.factor = command.value;
+				this.view.factor = command.value;
 				return "render-and-sync";
 			case "set-range":
 				if (command.value <= 0) {
 					return "render-and-sync";
 				}
-				this.canvas.range = command.value;
+				this.view.range = command.value;
 				return "render-and-sync";
 		}
 	}

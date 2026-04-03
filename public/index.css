@@ -14,6 +14,17 @@ body {
 
 canvas {
 	display: block;
+	position: fixed;
+	inset: 0;
+}
+
+#canvas {
+	z-index: 1;
+}
+
+#canvas-webgl {
+	z-index: 0;
+	pointer-events: none;
 }
 
 .controls {
@@ -202,7 +213,7 @@ canvas {
 
 .controls__footer .controls__reset {
 	margin-left: auto;
-	min-width: 96px;
+	min-width: 84px;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
