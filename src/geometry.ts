@@ -18,12 +18,28 @@ export function dotCross(a: Point, b: Point): Point {
 	return point(dot(a, b), cross(a, b));
 }
 
+export function anglePoint(angle: number): Point {
+	return point(Math.cos(angle * Math.PI * 2), Math.sin(angle * Math.PI * 2));
+}
+
+export function pointAngle(point: Point): number {
+	return Math.atan2(point.y, point.x) / (Math.PI * 2);
+}
+
 export function reflect1X(v: Point): Point {
 	return point(1 - v.x, v.y);
 }
 
 export function reflectY(v: Point): Point {
 	return point(v.x, -v.y);
+}
+
+export function rotateScale(
+	position: Point,
+	rotation: number,
+	scale: number,
+): Point {
+	return mul(dotCross(anglePoint(rotation), position), scale);
 }
 
 export function shiftCorner(p: Point, q: Point, shape: Point): Point {
@@ -139,13 +155,9 @@ export function shiftRotation(side: ShapeSide): number {
 		case 0:
 			return 0;
 		case 1:
-			return Math.atan2(side.shape.y, side.shape.x) / (Math.PI * 2) - 0.5;
+			return pointAngle(side.shape) - 0.5;
 		case 2:
-			return (
-				-Math.atan2(reflect1X(side.shape).y, reflect1X(side.shape).x) /
-					(Math.PI * 2) +
-				0.5
-			);
+			return -pointAngle(reflect1X(side.shape)) + 0.5;
 	}
 	return 0;
 }
@@ -155,13 +167,9 @@ export function unshiftRotation(side: ShapeSide): number {
 		case 0:
 			return 0;
 		case 1:
-			return -Math.atan2(side.shape.y, side.shape.x) / (Math.PI * 2) + 0.5;
+			return -pointAngle(side.shape) + 0.5;
 		case 2:
-			return (
-				Math.atan2(reflect1X(side.shape).y, reflect1X(side.shape).x) /
-					(Math.PI * 2) -
-				0.5
-			);
+			return pointAngle(reflect1X(side.shape)) - 0.5;
 	}
 	return 0;
 }

@@ -32,8 +32,10 @@ export function getAdjacentSides(sideIndex: number): [number, number] {
 export function getCornerAcrossSide(
 	cornerIndex: number,
 	sideIndex: number,
-	neighbor: number,
+	otherSideIndex: number,
 ): number {
 	const [startCornerIndex] = getSideCorners(sideIndex);
-	return cornerIndex === startCornerIndex ? neighbor : (neighbor + 2) % 3;
+	return cornerIndex === startCornerIndex
+		? otherSideIndex
+		: (otherSideIndex + 2) % 3;
 }

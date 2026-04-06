@@ -1,6 +1,7 @@
 import { color, colorString, withAlpha } from "./color";
 import type Renderer from "./render";
 import type { RenderBatch } from "./render";
+import { getWallColor } from "./render";
 import type { Color, Point } from "./types";
 import { point } from "./types";
 import type View from "./view";
@@ -91,6 +92,13 @@ export default class Canvas {
 		this.context.fillRect(p.x, p.y, q.x, q.y);
 	}
 
+	drawSegment(a: Point, b: Point): void {
+		this.context.beginPath();
+		this.context.moveTo(...this.transform(a));
+		this.context.lineTo(...this.transform(b));
+		this.context.stroke();
+	}
+
 	clear(): void {
 		this.context.clearRect(
 			0,
@@ -111,6 +119,7 @@ export default class Canvas {
 		this.drawWalls(batch);
 		this.drawAvatars(batch, renderer);
 		this.drawLabels(batch, renderer);
+		this.drawCornerWalls(renderer);
 	}
 
 	drawTiles(batch: RenderBatch): void {
@@ -123,9 +132,9 @@ export default class Canvas {
 
 	drawWalls(batch: RenderBatch): void {
 		for (const wall of batch.walls) {
-			this.setColor(wall.color);
+			this.setColor(getWallColor(wall.start, wall.end));
 			this.setPixelWidth(tileStrokePixels);
-			this.drawPath(wall.quad, "both");
+			this.drawPath(wall.polygon, "both");
 		}
 	}
 
@@ -143,6 +152,30 @@ export default class Canvas {
 			}
 			this.setColor(withAlpha(renderer.wallColor, 0.45));
 			this.drawText(tile.labelPosition, tile.label);
+		}
+	}
+
+	drawCornerWalls(renderer: Renderer): void {
+		if (!renderer.debug) {
+			return;
+		}
+		for (const [corner, wall] of renderer.getDebugCornerWalls()) {
+			if (!wall) {
+				continue;
+			}
+			for (const [index, direction] of [wall.left, wall.right].entries()) {
+				if (!direction) {
+					continue;
+				}
+				this.setColor(
+					index === 0 ? color(1.0, 0.2, 0.2) : color(0.2, 1.0, 0.2),
+				);
+				this.setPixelWidth(1);
+				this.drawSegment(
+					corner,
+					point(corner.x + direction.x, corner.y + direction.y),
+				);
+			}
 		}
 	}
 }

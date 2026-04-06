@@ -1,25 +1,48 @@
 import assert from "./assert";
 import type Canvas from "./canvas";
 import { brightness, color, hsl } from "./color";
-import { shiftCorner, shiftPosition, shiftShape } from "./geometry";
+import {
+	rotateScale,
+	shiftCorner,
+	shiftPosition,
+	shiftShape,
+} from "./geometry";
 import * as math from "./linalg";
 import type Physics from "./physics";
-import { getAdjacentSides, getSideCorners } from "./topology";
-import type { Color, Point, RenderStats, Segment } from "./types";
+import { ensureCornerWalls } from "./plan";
+import { getAdjacentSides, getSideCorners, getTileCorners } from "./topology";
+import type {
+	Color,
+	CornerWall,
+	Point,
+	RenderMode,
+	RenderStats,
+	Segment,
+	TileId,
+	TopologyMode,
+} from "./types";
 import { point, segment } from "./types";
 import type View from "./view";
 import type WebGLRenderer from "./webgl";
 
 export interface TileDraw {
 	polygon: Point[];
+	start: Point;
+	end: Point;
+	worldStart: Point;
+	worldEnd: Point;
 	color: Color;
 	label: string | undefined;
 	labelPosition: Point | undefined;
 }
 
 export interface WallDraw {
-	quad: [Point, Point, Point, Point];
-	color: Color;
+	polygon: Point[];
+	start: Point;
+	end: Point;
+	worldStart: Point;
+	worldEnd: Point;
+	scale: number;
 }
 
 export interface AvatarDraw {
@@ -62,7 +85,53 @@ function isSegmentOutsideViewport({ start: p, end: q }: Segment): boolean {
 	);
 }
 
-function getWallColor(a: Point, b: Point): Color {
+function clipPolygonHalfSpace(
+	polygon: Point[],
+	isInside: (point: Point) => boolean,
+	intersect: (a: Point, b: Point) => Point,
+): Point[] {
+	const clipped: Point[] = [];
+	for (let i = 0; i < polygon.length; i++) {
+		const a = polygon[i];
+		const b = polygon[(i + 1) % polygon.length];
+		const insideA = isInside(a);
+		const insideB = isInside(b);
+		if (insideA && insideB) {
+			clipped.push(b);
+		} else if (insideA && !insideB) {
+			clipped.push(intersect(a, b));
+		} else if (!insideA && insideB) {
+			clipped.push(intersect(a, b), b);
+		}
+	}
+	return clipped;
+}
+
+function clipPolygonToViewport(polygon: Point[]): Point[] {
+	let clipped = polygon;
+	clipped = clipPolygonHalfSpace(
+		clipped,
+		(point) => point.x >= -1,
+		(a, b) => math.interpolate(a, b, (-1 - a.x) / (b.x - a.x)),
+	);
+	clipped = clipPolygonHalfSpace(
+		clipped,
+		(point) => point.x <= 1,
+		(a, b) => math.interpolate(a, b, (1 - a.x) / (b.x - a.x)),
+	);
+	clipped = clipPolygonHalfSpace(
+		clipped,
+		(point) => point.y >= -1,
+		(a, b) => math.interpolate(a, b, (-1 - a.y) / (b.y - a.y)),
+	);
+	return clipPolygonHalfSpace(
+		clipped,
+		(point) => point.y <= 1,
+		(a, b) => math.interpolate(a, b, (1 - a.y) / (b.y - a.y)),
+	);
+}
+
+export function getWallColor(a: Point, b: Point): Color {
 	const nearest = math.nearestOnSegment(a, b, point(0.0, 0.0));
 	const orth = math.rotateLeft(math.sub(b, a));
 	const facing = math.dot(
@@ -77,10 +146,13 @@ export default class Renderer {
 	tileColor: Color = color(0.4, 0.4, 0.8);
 	avatarColor: Color = color(0.1, 0.1, 0.1);
 	wallColor: Color = color(0, 0, 0);
-	backgroundColor: Color = color(0.0, 1.0, 0.0);
+	backgroundColor: Color = color(0.0, 0.0, 0.0);
+	cameraHeight = 10;
+	wallHeight: number | undefined = 1.0;
 	renderStats: RenderStats | undefined = undefined;
-	private webglValue = false;
-	private lastRenderAt: number | undefined = undefined;
+	private renderModeValue: RenderMode = "canvas";
+	topologyMode: TopologyMode = "none";
+	lastRenderAt: number | undefined = undefined;
 
 	showCurrent = false;
 	showSelf = false;
@@ -111,62 +183,113 @@ export default class Renderer {
 		return this.physics.avatarRadius;
 	}
 
-	get webgl(): boolean {
-		return this.webglValue && this.webglAvailable;
+	get avatarWorldPosition(): Point {
+		return this.physics.getWorldPoint(this.physics.position);
 	}
 
-	set webgl(value: boolean) {
-		this.webglValue = value && this.webglAvailable;
+	getDebugCornerWalls(): Array<[Point, CornerWall | undefined]> {
+		const { shape } = this.physics.plan.get(this.physics.currentTileId);
+		const corners = this.getCorners(shape);
+		const localCorners = getTileCorners(shape);
+		const walls = ensureCornerWalls(
+			this.physics.plan,
+			this.physics.currentTileId,
+		);
+		return corners.map((corner, index) => [
+			corner,
+			walls[index] && {
+				left:
+					walls[index]?.left &&
+					math.sub(
+						shiftCorner(
+							corners[0],
+							corners[2],
+							math.add(localCorners[index], walls[index].left),
+						),
+						corner,
+					),
+				right:
+					walls[index]?.right &&
+					math.sub(
+						shiftCorner(
+							corners[0],
+							corners[2],
+							math.add(localCorners[index], walls[index].right),
+						),
+						corner,
+					),
+			},
+		]);
+	}
+
+	get renderMode(): RenderMode {
+		return this.renderModeValue === "canvas" || this.webglAvailable
+			? this.renderModeValue
+			: "canvas";
+	}
+
+	set renderMode(value: RenderMode) {
+		this.renderModeValue =
+			value === "canvas" || this.webglAvailable ? value : "canvas";
+	}
+
+	get usesWebGL(): boolean {
+		return this.renderMode !== "canvas";
 	}
 
 	getCorners(shape: Point): [Point, Point, Point] {
-		const sin = Math.sin(this.physics.rotation * Math.PI * 2);
-		const cos = Math.cos(this.physics.rotation * Math.PI * 2);
-		const leftCorner = point(
-			(-(cos * this.physics.position.x + -sin * this.physics.position.y) *
-				this.physics.scale) /
-				this.view.range,
-			(-(sin * this.physics.position.x + cos * this.physics.position.y) *
-				this.physics.scale) /
-				this.view.range,
-		);
-		const rightCorner = point(
-			(-(
-				cos * -(1 - this.physics.position.x) +
-				-sin * this.physics.position.y
-			) *
-				this.physics.scale) /
-				this.view.range,
-			(-(sin * -(1 - this.physics.position.x) + cos * this.physics.position.y) *
-				this.physics.scale) /
-				this.view.range,
+		const scale = this.physics.scale / this.view.range;
+		const rotation = 0.5 - this.physics.rotation;
+		const leftCorner = rotateScale(this.physics.position, rotation, scale);
+		const rightCorner = rotateScale(
+			point(this.physics.position.x - 1, this.physics.position.y),
+			rotation,
+			scale,
 		);
 		const topCorner = shiftCorner(leftCorner, rightCorner, shape);
 		return [leftCorner, topCorner, rightCorner];
 	}
 
-	pushWall(batch: RenderBatch, edge: Segment, bounds: Segment): void {
+	pushWall(
+		batch: RenderBatch,
+		edge: Segment,
+		worldEdge: Segment,
+		bounds: Segment,
+	): void {
 		const visibleStart = intersectOrigin(edge.start, edge.end, bounds.start);
 		const visibleEnd = intersectOrigin(edge.start, edge.end, bounds.end);
 		const scale =
-			2 /
-			Math.sqrt(math.lineDistanceSq(visibleStart, visibleEnd, point(0.0, 0.0)));
+			this.wallHeight === undefined
+				? 2 /
+					Math.sqrt(
+						math.lineDistanceSq(visibleStart, visibleEnd, point(0.0, 0.0)),
+					)
+				: this.cameraHeight / (this.cameraHeight - this.wallHeight);
+		const polygon = clipPolygonToViewport([
+			visibleStart,
+			visibleEnd,
+			math.mul(visibleEnd, scale),
+			math.mul(visibleStart, scale),
+		]);
+		if (polygon.length < 3) {
+			return;
+		}
 		batch.walls.push({
-			quad: [
-				visibleStart,
-				visibleEnd,
-				math.mul(visibleEnd, scale),
-				math.mul(visibleStart, scale),
-			],
-			color: getWallColor(edge.start, edge.end),
+			polygon,
+			start: edge.start,
+			end: edge.end,
+			worldStart: worldEdge.start,
+			worldEnd: worldEdge.end,
+			scale,
 		});
 	}
 
 	pushTile(
 		batch: RenderBatch,
 		triangle: [Point, Point, Point],
+		worldTriangle: [Point, Point, Point],
 		stats: RenderStats,
-		tileId: number,
+		tileId: TileId,
 		clip: Segment | undefined,
 		highlight: boolean,
 	): void {
@@ -177,7 +300,7 @@ export default class Renderer {
 			(vertexA.y + vertexB.y + vertexC.y) / 3,
 		);
 		const tileColor = this.showTile
-			? hsl((tileId * 0.61803398875) % 1, 0.5, 0.55)
+			? hsl((Number(tileId % 1000000n) * 0.61803398875) % 1, 0.5, 0.55)
 			: this.tileColor;
 		let path: Point[];
 		if (!clip) {
@@ -203,8 +326,16 @@ export default class Renderer {
 			}
 			path.push(intersectOrigin(vertexC, vertexA, clipEnd));
 		}
+		path = clipPolygonToViewport(path);
+		if (path.length < 3) {
+			return;
+		}
 		batch.tiles.push({
 			polygon: path,
+			start: triangle[0],
+			end: triangle[2],
+			worldStart: worldTriangle[0],
+			worldEnd: worldTriangle[2],
 			color: highlight ? brightness(tileColor, 0.5) : tileColor,
 			label:
 				this.showTile && (!clip || isPointInPolygon(triangleCentroid, path))
@@ -218,10 +349,12 @@ export default class Renderer {
 		batch: RenderBatch,
 		stats: RenderStats,
 		depth: number,
-		tileId: number | undefined,
+		tileId: TileId | undefined,
 		sideIndex: number | undefined,
 		branchStart: Point,
 		branchEnd: Point,
+		worldStart: Point,
+		worldEnd: Point,
 		clipStart: Point | undefined,
 		clipEnd: Point | undefined,
 	): void {
@@ -239,6 +372,7 @@ export default class Renderer {
 			this.pushWall(
 				batch,
 				segment(branchStart, branchEnd),
+				segment(worldStart, worldEnd),
 				segment(clipStart ?? branchStart, clipEnd ?? branchEnd),
 			);
 			return;
@@ -247,9 +381,11 @@ export default class Renderer {
 		const { shape, sides } = this.physics.plan.get(tileId);
 		const shiftedShape = shiftShape(shape, sideIndex);
 		const branchCorner = shiftCorner(branchStart, branchEnd, shiftedShape);
+		const worldCorner = shiftCorner(worldStart, worldEnd, shiftedShape);
 		this.pushTile(
 			batch,
 			[branchStart, branchCorner, branchEnd],
+			[worldStart, worldCorner, worldEnd],
 			stats,
 			tileId,
 			segment(clipStart ?? branchStart, clipEnd ?? branchEnd),
@@ -273,9 +409,11 @@ export default class Renderer {
 			stats,
 			depth + 1,
 			leftSide?.tileId,
-			leftSide?.neighbor,
+			leftSide?.sideIndex,
 			branchStart,
 			branchCorner,
+			worldStart,
+			worldCorner,
 			clipStart && math.isClockwise(branchStart, clipStart)
 				? clipStart
 				: undefined,
@@ -288,9 +426,11 @@ export default class Renderer {
 			stats,
 			depth + 1,
 			rightSide?.tileId,
-			rightSide?.neighbor,
+			rightSide?.sideIndex,
 			branchCorner,
 			branchEnd,
+			worldCorner,
+			worldEnd,
 			math.isClockwise(branchCorner, clipStart ?? branchStart)
 				? (clipStart ?? branchStart)
 				: undefined,
@@ -302,9 +442,13 @@ export default class Renderer {
 		const batch: RenderBatch = { tiles: [], walls: [], avatars: [] };
 		const { shape, sides } = this.physics.plan.get(this.physics.currentTileId);
 		const corners = this.getCorners(shape);
+		const worldCorners = getTileCorners(shape).map((corner) =>
+			this.physics.getWorldPoint(corner),
+		) as [Point, Point, Point];
 		this.pushTile(
 			batch,
 			corners,
+			worldCorners,
 			stats,
 			this.physics.currentTileId,
 			undefined,
@@ -319,9 +463,11 @@ export default class Renderer {
 				stats,
 				1,
 				sides[sideIndex]?.tileId,
-				sides[sideIndex]?.neighbor,
+				sides[sideIndex]?.sideIndex,
 				edgeStart,
 				edgeEnd,
+				worldCorners[edgeStartIndex],
+				worldCorners[edgeEndIndex],
 				undefined,
 				undefined,
 			);
@@ -340,11 +486,12 @@ export default class Renderer {
 				this.lastRenderAt === undefined ? 0 : (now - this.lastRenderAt) / 1000,
 		};
 		const batch = this.buildBatch(stats);
-		if (this.webgl && this.webglRenderer) {
+		if (this.usesWebGL && this.webglRenderer) {
 			this.webglRenderer.clear(this.backgroundColor);
 			this.webglRenderer.draw(batch, this, this.view);
 			this.canvasRenderer.clear();
 			this.canvasRenderer.drawLabels(batch, this);
+			this.canvasRenderer.drawCornerWalls(this);
 		} else {
 			this.canvasRenderer.draw(batch, this);
 		}

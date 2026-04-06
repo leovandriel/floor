@@ -1,5 +1,7 @@
 import assert from "./assert";
 
+export type TileId = bigint;
+
 export interface Point {
 	x: number;
 	y: number;
@@ -19,22 +21,18 @@ export interface Color {
 }
 
 export interface Side {
-	tileId: number;
-	neighbor: number;
+	tileId: TileId;
+	sideIndex: number;
 }
 
-export function side(tileId: number, neighbor: number): Side {
+export function side(tileId: TileId, sideIndex: number): Side {
+	assert(tileId >= 0n, "Invalid side tileId", tileId);
 	assert(
-		Number.isInteger(tileId) && tileId >= 0,
-		"Invalid side tileId",
-		tileId,
+		Number.isInteger(sideIndex) && sideIndex >= 0,
+		"Invalid side sideIndex",
+		sideIndex,
 	);
-	assert(
-		Number.isInteger(neighbor) && neighbor >= 0,
-		"Invalid side neighbor",
-		neighbor,
-	);
-	return { tileId, neighbor };
+	return { tileId, sideIndex };
 }
 
 export interface Tile {
@@ -61,16 +59,21 @@ export function tile(
 
 export interface Plan {
 	slug: string;
-	get(id: number): Tile;
+	get(id: TileId): Tile;
+	deterministic: boolean;
 	cornerWallCache: Record<
-		number,
+		string,
 		Record<number, Record<number, Point | null> | undefined> | undefined
 	>;
 }
 
-export function plan(slug: string, get: (id: number) => Tile): Plan {
+export function plan(
+	slug: string,
+	get: (id: TileId) => Tile,
+	deterministic = true,
+): Plan {
 	assert(slug.length > 0, "Plan slug must not be empty");
-	return { slug, get, cornerWallCache: {} };
+	return { slug, get, deterministic, cornerWallCache: {} };
 }
 
 export interface Segment {
@@ -93,5 +96,16 @@ export interface RenderStats {
 	maxDepth: number;
 	duration: number;
 }
+
+export type TopologyMode = "none" | "lazy" | "det";
+export const topologyModes: TopologyMode[] = ["none", "lazy", "det"];
+
+export type RenderMode = "canvas" | "webgl" | "checker" | "light";
+export const renderModes: RenderMode[] = [
+	"canvas",
+	"webgl",
+	"checker",
+	"light",
+];
 
 export type MouseAction = "down" | "up" | "move" | "drag" | "out";

@@ -46,7 +46,7 @@ test("getAdjacentSides returns the two sides other than the given side", () => {
 	assert.deepEqual(getAdjacentSides(2), [0, 1]);
 });
 
-test("getCornerAcrossSide maps both side corners into the neighbor frame", () => {
+test("getCornerAcrossSide maps both side corners into the sideIndex frame", () => {
 	assert.equal(getCornerAcrossSide(2, 0, 1), 1);
 	assert.equal(getCornerAcrossSide(0, 0, 1), 0);
 	assert.equal(getCornerAcrossSide(0, 1, 2), 2);

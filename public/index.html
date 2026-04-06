@@ -3,18 +3,18 @@
   <head>
     <meta charset="utf-8" />
     <title>floor</title>
-    <link rel="apple-touch-icon" href="index.png">
-    <link rel="icon" type="image/png" sizes="192x192" href="index.png" />
+    <link rel="apple-touch-icon" href="/index.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/index.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="stylesheet" href="index.css" />
-    <script src="bundle.js" defer></script>
+    <link rel="stylesheet" href="/index.css" />
+    <script src="/bundle.js" defer></script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="message"></div>
     <aside id="controls" class="controls" aria-label="View controls" hidden>
       <div class="controls__row controls__row--header">
-        <label class="controls__label" for="plan-select">Plan <kbd>O</kbd><kbd>P</kbd></label>
+        <label class="controls__label" for="plan-select">Plan <kbd>F</kbd><kbd>G</kbd></label>
         <select id="plan-select" class="controls__select"></select>
         <button
           type="button"
@@ -45,7 +45,7 @@
         <div class="controls__row controls__row--field">
           <label class="controls__label" for="state-current">Tile</label>
           <div class="controls__field">
-            <input id="state-current" data-field="current" type="number" step="1" />
+            <input id="state-current" data-field="current" type="text" inputmode="numeric" />
           </div>
         </div>
 
@@ -78,14 +78,14 @@
         </div>
 
         <div class="controls__row controls__row--field">
-          <label class="controls__label" for="state-factor">Zoom <kbd>7</kbd><kbd>8</kbd></label>
+          <label class="controls__label" for="state-factor">Zoom <kbd>3</kbd><kbd>4</kbd></label>
           <div class="controls__field">
             <input id="state-factor" data-field="factor" type="number" step="0.05" min="0.01" />
           </div>
         </div>
 
         <div class="controls__row controls__row--field">
-          <label class="controls__label" for="state-range">Warp <kbd>9</kbd><kbd>0</kbd></label>
+          <label class="controls__label" for="state-range">Warp <kbd>1</kbd><kbd>2</kbd></label>
           <div class="controls__field">
             <input id="state-range" data-field="range" type="number" step="0.05" min="0.01" />
           </div>
@@ -111,9 +111,32 @@
         </label>
       </div>
 
+      <div class="controls__group">
+        <div class="controls__row controls__row--field">
+          <label class="controls__label" for="render-mode">Render <kbd>Z</kbd></label>
+          <div class="controls__field">
+            <select id="render-mode" class="controls__select">
+              <option value="canvas">Canvas</option>
+              <option value="webgl">WebGL</option>
+              <option value="checker">WebGL Checker</option>
+              <option value="light">WebGL Light</option>
+            </select>
+          </div>
+        </div>
+        <div class="controls__row controls__row--field">
+          <label class="controls__label" for="topology-mode">Topology <kbd>C</kbd></label>
+          <div class="controls__field">
+            <select id="topology-mode" class="controls__select">
+              <option value="none">None</option>
+              <option value="lazy">Decycle Lazy</option>
+              <option value="det">Decycle Determ.</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
       <div class="controls__group controls__footer">
         <label><input id="toggle-debug" data-toggle="debug" type="checkbox" /> Debug <kbd>X</kbd></label>
-        <label><input id="toggle-webgl" data-toggle="webgl" type="checkbox" /> WebGL <kbd>G</kbd></label>
         <button type="button" class="controls__reset" data-action="reset">Reset <kbd>R</kbd></button>
       </div>
     </aside>

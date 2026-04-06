@@ -1,5 +1,9 @@
 import assert from "./assert";
-import { getSideDirectionAtCorner, transitionDirection } from "./geometry";
+import {
+	getSideDirectionAtCorner,
+	pointAngle,
+	transitionDirection,
+} from "./geometry";
 import { library } from "./library";
 import { cross, lengthSq, sub } from "./linalg";
 import {
@@ -8,14 +12,13 @@ import {
 	getOtherIncidentSide,
 	getTileCorners,
 } from "./topology";
-import type { CornerWall, Plan, Point, Tile } from "./types";
+import type { CornerWall, Plan, Point, Tile, TileId } from "./types";
 
 const maxPlanValidationDepth = 100;
 const maxPlanValidationCount = 1000;
-const maxCornerWallDepth = 10;
 const epsilon = 1e-5;
 
-function tryGetTile(plan: Plan, id: number): Tile | undefined {
+function tryGetTile(plan: Plan, id: TileId): Tile | undefined {
 	try {
 		return plan.get(id);
 	} catch {
@@ -33,10 +36,10 @@ export function getPlanBySlug(slug: string): Plan | undefined {
 }
 
 export function assertValidPlan(plan: Plan): void {
-	const root = tryGetTile(plan, 0);
-	assert(root, "Missing root tile", 0);
-	const visited = new Set<number>();
-	const frontier: Array<{ id: number; depth: number }> = [{ id: 0, depth: 0 }];
+	const root = tryGetTile(plan, 0n);
+	assert(root, "Missing root tile", 0n);
+	const visited = new Set<TileId>();
+	const frontier: Array<{ id: TileId; depth: number }> = [{ id: 0n, depth: 0 }];
 	while (frontier.length > 0) {
 		const next = frontier.shift();
 		if (!next) {
@@ -72,13 +75,13 @@ export function assertValidPlan(plan: Plan): void {
 			if (!side) {
 				continue;
 			}
-			const { tileId, neighbor } = side;
+			const { tileId, sideIndex } = side;
 			const inverseTile = tryGetTile(plan, tileId);
 			assert(inverseTile, "Missing tile at", id, j);
-			const inverse = inverseTile.sides[neighbor];
+			const inverse = inverseTile.sides[sideIndex];
 			assert(inverse, "Inverse missing at", id, j);
 			assert(id === inverse.tileId, "Inverse missing at", id, j);
-			assert(j === inverse.neighbor, "Inverse offset at", id, j);
+			assert(j === inverse.sideIndex, "Inverse offset at", id, j);
 			if (
 				depth < maxPlanValidationDepth &&
 				visited.size + frontier.length < maxPlanValidationCount
@@ -91,13 +94,13 @@ export function assertValidPlan(plan: Plan): void {
 
 function ensureCornerWallDirections(
 	plan: Plan,
-	tileIndex: number,
+	tileIndex: TileId,
 	cornerIndex: number,
 ): Record<number, Point | null> {
-	let tileDirections = plan.cornerWallCache[tileIndex];
+	let tileDirections = plan.cornerWallCache[tileIndex.toString()];
 	if (!tileDirections) {
 		tileDirections = {};
-		plan.cornerWallCache[tileIndex] = tileDirections;
+		plan.cornerWallCache[tileIndex.toString()] = tileDirections;
 	}
 	let cornerDirections = tileDirections[cornerIndex];
 	if (!cornerDirections) {
@@ -109,23 +112,22 @@ function ensureCornerWallDirections(
 
 function getCornerWallDirection(
 	plan: Plan,
-	tileIndex: number,
+	tileIndex: TileId,
 	cornerIndex: number,
 	sideIndex: number,
 	visiting: Set<string>,
-	depth = 0,
+	accumulatedTurn = 0,
 ): Point | undefined {
-	assert(
-		depth < maxCornerWallDepth,
-		"Corner wall recursion limit reached",
-		tileIndex,
-		cornerIndex,
-		sideIndex,
-	);
+	if (accumulatedTurn > 0.5) {
+		return undefined;
+	}
 	const key = `${tileIndex}:${cornerIndex}:${sideIndex}`;
-	const cached = plan.cornerWallCache[tileIndex]?.[cornerIndex]?.[sideIndex];
-	if (cached !== undefined) {
-		return cached ?? undefined;
+	if (accumulatedTurn === 0) {
+		const cached =
+			plan.cornerWallCache[tileIndex.toString()]?.[cornerIndex]?.[sideIndex];
+		if (cached !== undefined) {
+			return cached ?? undefined;
+		}
 	}
 	let wallDirection: Point | undefined;
 	// Abort recursive corner cycles by caching the missing direction.
@@ -137,17 +139,33 @@ function getCornerWallDirection(
 		const { shape, sides } = plan.get(tileIndex);
 		const side = sides[sideIndex];
 		if (!side) {
-			// A missing neighbor means the wall direction is just the local edge ray.
+			// A missing sideIndex means the wall direction is just the local edge ray.
 			wallDirection = getSideDirectionAtCorner(shape, sideIndex, cornerIndex);
 		} else {
-			const { tileId, neighbor } = side;
+			const { tileId, sideIndex: neighborSideIndex } = side;
 			const nextTile = plan.get(tileId);
 			const nextCornerIndex = getCornerAcrossSide(
 				cornerIndex,
 				sideIndex,
-				neighbor,
+				neighborSideIndex,
 			);
-			const nextSideIndex = getOtherIncidentSide(nextCornerIndex, neighbor);
+			const nextSideIndex = getOtherIncidentSide(
+				nextCornerIndex,
+				neighborSideIndex,
+			);
+			const direction = getSideDirectionAtCorner(shape, sideIndex, cornerIndex);
+			const nextDirection = transitionDirection(
+				getSideDirectionAtCorner(
+					nextTile.shape,
+					nextSideIndex,
+					nextCornerIndex,
+				),
+				{ shape: nextTile.shape, index: neighborSideIndex },
+				{ shape, index: sideIndex },
+			);
+			const deltaTurn =
+				((pointAngle(nextDirection) - pointAngle(direction) + 0.5 + 1) % 1) -
+				0.5;
 			// Trace through the seam until we reach a boundary edge.
 			const nextWallDirection = getCornerWallDirection(
 				plan,
@@ -155,13 +173,13 @@ function getCornerWallDirection(
 				nextCornerIndex,
 				nextSideIndex,
 				visiting,
-				depth + 1,
+				accumulatedTurn + Math.abs(deltaTurn),
 			);
 			if (nextWallDirection) {
 				// Bring the traced wall direction back into this tile's local frame.
 				wallDirection = transitionDirection(
 					nextWallDirection,
-					{ shape: nextTile.shape, index: neighbor },
+					{ shape: nextTile.shape, index: neighborSideIndex },
 					{ shape, index: sideIndex },
 				);
 			}
@@ -169,18 +187,20 @@ function getCornerWallDirection(
 
 		visiting.delete(key);
 	}
-	const cornerDirections = ensureCornerWallDirections(
-		plan,
-		tileIndex,
-		cornerIndex,
-	);
-	cornerDirections[sideIndex] = wallDirection ?? null;
+	if (accumulatedTurn === 0) {
+		const cornerDirections = ensureCornerWallDirections(
+			plan,
+			tileIndex,
+			cornerIndex,
+		);
+		cornerDirections[sideIndex] = wallDirection ?? null;
+	}
 	return wallDirection;
 }
 
 export function ensureCornerWalls(
 	plan: Plan,
-	tileIndex: number,
+	tileIndex: TileId,
 ): [CornerWall | undefined, CornerWall | undefined, CornerWall | undefined] {
 	const tile = plan.get(tileIndex);
 	const walls: [

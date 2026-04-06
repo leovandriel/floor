@@ -49,9 +49,9 @@ npm run lint
 npm run typecheck
 ```
 
-## Usage
-
 ## Controls
+
+The app starts on `grid` by default.
 
 ### Movement
 
@@ -65,12 +65,35 @@ npm run typecheck
 
 ### Navigation Tuning
 
-- `0`: decrease warp
-- `9`: increase warp
-- `8`: zoom in
-- `7`: zoom out
-- `6`: increase local scale
+- `1`: decrease warp
+- `2`: increase warp
+- `3`: zoom out
+- `4`: zoom in
 - `5`: decrease local scale
+- `6`: increase local scale
+
+### Navigation
+
+- `F`: previous plan
+- `G`: next plan
+
+### Modes
+
+- `Z`: cycle render mode
+- `C`: cycle topology mode
+
+Render modes:
+
+- `Canvas`
+- `WebGL`
+- `WebGL Checker`
+- `WebGL Light`
+
+Topology modes:
+
+- `None`
+- `Decycle Lazy`
+- `Decycle Determ.`
 
 `warp`, `zoom`, and `scale` affect slightly different parts of the rendering:
 
@@ -83,6 +106,16 @@ The movement model is intentionally non-Euclidean, so turning and wrapping may f
 ### Debug Toggle
 
 - `X`: toggle debug overlays
+- `R`: reset the current plan state
+
+## URLs
+
+Plan and tile id live in the path:
+
+- `/grid`
+- `/grid/123`
+
+The remaining view state is stored in query parameters.
 
 ## License
 

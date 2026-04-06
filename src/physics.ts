@@ -1,6 +1,7 @@
 import {
 	getInsetEdge,
 	getInwardNormal,
+	rotateScale,
 	transitionPosition,
 	transitionRotation,
 	transitionScale,
@@ -8,7 +9,7 @@ import {
 import * as math from "./linalg";
 import { ensureCornerWalls } from "./plan";
 import { getSideCorners, getTileCorners } from "./topology";
-import type { Plan, Point, ShapeSide } from "./types";
+import type { Plan, Point, ShapeSide, TileId } from "./types";
 import { point, segment } from "./types";
 
 export { transitionPosition } from "./geometry";
@@ -25,15 +26,45 @@ export function isInsideTile(position: Point, shape: Point): boolean {
 }
 
 export default class Physics {
-	currentTileId = 0;
-	position = point(0.5, 0.2);
+	currentTileId: TileId = 0n;
+	position = point(0.5, 0.25);
 	rotation = 0;
+	worldRotation = 0;
 	scale = 0.2;
+	worldOffset = point(0.0, 0.0);
 	avatarRadius = 0.01;
 	plan: Plan;
 
 	constructor(plan: Plan) {
 		this.plan = plan;
+		this.resetWorld();
+	}
+
+	private worldDelta(position: Point): Point {
+		return rotateScale(position, -this.worldRotation, this.scale);
+	}
+
+	getWorldPoint(position: Point): Point {
+		return math.sub(this.worldOffset, this.worldDelta(position));
+	}
+
+	private setWorldPoint(position: Point, worldPosition: Point): void {
+		this.worldOffset = math.add(worldPosition, this.worldDelta(position));
+	}
+
+	resetWorld(): void {
+		this.worldRotation = this.rotation;
+		this.setWorldPoint(this.position, point(0.0, 0.0));
+	}
+
+	private transport(from: ShapeSide, to: ShapeSide): void {
+		const turn = transitionRotation(from, to);
+		const worldPosition = this.getWorldPoint(this.position);
+		this.rotation += turn;
+		this.worldRotation += turn;
+		this.position = transitionPosition(this.position, from, to);
+		this.scale *= transitionScale(from, to);
+		this.setWorldPoint(this.position, worldPosition);
 	}
 
 	simulatePhysics(next: Point, wallCount = 0): Point {
@@ -83,16 +114,17 @@ export default class Physics {
 						const reflectedNext = math.add(reflectedDelta, this.position);
 						this.simulatePhysics(reflectedNext, wallCount + 1);
 					} else {
-						const { tileId, neighbor } = side;
+						const { tileId, sideIndex: neighborSideIndex } = side;
 						const { shape: nextShape } = this.plan.get(tileId);
 						const from: ShapeSide = { shape, index: sideIndex };
-						const to: ShapeSide = { shape: nextShape, index: neighbor };
+						const to: ShapeSide = {
+							shape: nextShape,
+							index: neighborSideIndex,
+						};
 						// Seam crossings transport position, heading, and scale together.
 						this.position = math.interpolate(this.position, next, movePosition);
-						this.rotation += transitionRotation(from, to);
-						this.position = transitionPosition(this.position, from, to);
+						this.transport(from, to);
 						const shiftedNext = transitionPosition(next, from, to);
-						this.scale *= transitionScale(from, to);
 						this.currentTileId = tileId;
 						this.simulatePhysics(shiftedNext, wallCount);
 					}
@@ -202,7 +234,7 @@ export default class Physics {
 			if (!side) {
 				continue;
 			}
-			const { tileId, neighbor } = side;
+			const { tileId, sideIndex: neighborSideIndex } = side;
 			const [sideStartIndex, sideEndIndex] = getSideCorners(sideIndex);
 			const sideStart = corners[sideStartIndex];
 			const sideEnd = corners[sideEndIndex];
@@ -211,10 +243,8 @@ export default class Physics {
 			}
 			const { shape: nextShape } = this.plan.get(tileId);
 			const from: ShapeSide = { shape, index: sideIndex };
-			const to: ShapeSide = { shape: nextShape, index: neighbor };
-			this.rotation += transitionRotation(from, to);
-			this.position = transitionPosition(this.position, from, to);
-			this.scale *= transitionScale(from, to);
+			const to: ShapeSide = { shape: nextShape, index: neighborSideIndex };
+			this.transport(from, to);
 			this.currentTileId = tileId;
 			return this.simulateSnap(depth + 1);
 		}
@@ -225,19 +255,21 @@ export default class Physics {
 		const previousCurrentTileId = this.currentTileId;
 		const previousPosition = point(this.position.x, this.position.y);
 		const previousRotation = this.rotation;
+		const previousWorldRotation = this.worldRotation;
 		const previousScale = this.scale;
-		const sin = Math.sin(this.rotation * Math.PI * 2);
-		const cos = Math.cos(this.rotation * Math.PI * 2);
-		const next = point(
-			this.position.x + (cos * delta.x + sin * delta.y) / this.scale,
-			this.position.y + (-sin * delta.x + cos * delta.y) / this.scale,
+		const previousWorldOffset = point(this.worldOffset.x, this.worldOffset.y);
+		const next = math.add(
+			this.position,
+			rotateScale(delta, this.rotation, 1 / this.scale),
 		);
 		this.simulatePhysics(next);
 		if (!this.simulateSnap()) {
 			this.currentTileId = previousCurrentTileId;
 			this.position = previousPosition;
 			this.rotation = previousRotation;
+			this.worldRotation = previousWorldRotation;
 			this.scale = previousScale;
+			this.worldOffset = previousWorldOffset;
 		}
 	}
 

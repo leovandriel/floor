@@ -3,7 +3,7 @@ import type { Command, ControlCommand, SetNumberCommand } from "./control";
 import { library } from "./library";
 import type Physics from "./physics";
 import type Renderer from "./render";
-import type { Plan, RenderStats } from "./types";
+import type { Plan, RenderMode, RenderStats, TopologyMode } from "./types";
 import { formatStateNumber } from "./url";
 import type View from "./view";
 
@@ -44,7 +44,6 @@ export function isControlsTarget(target: EventTarget | null): boolean {
 }
 
 const stateCommandByField: Record<string, SetNumberCommand> = {
-	current: "set-current",
 	x: "set-x",
 	y: "set-y",
 	rotation: "set-rotation",
@@ -65,19 +64,14 @@ export default class UI {
 	private factorInput!: HTMLInputElement;
 	private rangeInput!: HTMLInputElement;
 	private debugInput!: HTMLInputElement;
-	private webglInput!: HTMLInputElement;
+	private renderModeInput!: HTMLSelectElement;
+	private topologyModeInput!: HTMLSelectElement;
 	private tilesOutput!: HTMLInputElement;
 	private depthOutput!: HTMLInputElement;
 	private branchesOutput!: HTMLInputElement;
 	private fpsOutput!: HTMLInputElement;
 
-	constructor(private readonly enabled: boolean) {}
-
 	init(onCommand: (command: Command) => void): void {
-		if (!this.enabled) {
-			return;
-		}
-
 		this.panel = getRequiredElement("controls", HTMLElement);
 		this.planSelect = getRequiredElement("plan-select", HTMLSelectElement);
 		const collapseButton = this.panel.querySelector(
@@ -96,7 +90,11 @@ export default class UI {
 		this.factorInput = getRequiredElement("state-factor", HTMLInputElement);
 		this.rangeInput = getRequiredElement("state-range", HTMLInputElement);
 		this.debugInput = getRequiredElement("toggle-debug", HTMLInputElement);
-		this.webglInput = getRequiredElement("toggle-webgl", HTMLInputElement);
+		this.renderModeInput = getRequiredElement("render-mode", HTMLSelectElement);
+		this.topologyModeInput = getRequiredElement(
+			"topology-mode",
+			HTMLSelectElement,
+		);
 		this.tilesOutput = getRequiredElement("stats-tiles", HTMLInputElement);
 		this.depthOutput = getRequiredElement("stats-depth", HTMLInputElement);
 		this.branchesOutput = getRequiredElement(
@@ -120,12 +118,9 @@ export default class UI {
 		physics: Physics,
 		renderer: Renderer,
 		plan: Plan,
+		topologyMode: TopologyMode,
 		stats: RenderStats | undefined,
 	): void {
-		if (!this.enabled) {
-			return;
-		}
-
 		this.planSelect.value = plan.slug;
 		this.currentInput.value = String(physics.currentTileId);
 		this.currentInput.removeAttribute("max");
@@ -136,8 +131,11 @@ export default class UI {
 		this.factorInput.value = formatStateNumber(view.factor);
 		this.rangeInput.value = formatStateNumber(view.range);
 		this.debugInput.checked = renderer.debug;
-		this.webglInput.checked = renderer.webgl;
-		this.webglInput.disabled = !renderer.webglAvailable;
+		this.renderModeInput.value = renderer.renderMode;
+		this.topologyModeInput.value = topologyMode;
+		for (const option of this.renderModeInput.options) {
+			option.disabled = option.value !== "canvas" && !renderer.webglAvailable;
+		}
 		this.tilesOutput.value = String(stats?.tiles ?? 0);
 		this.depthOutput.value = String(stats?.maxDepth ?? 0);
 		this.branchesOutput.value = String(stats?.branches ?? 0);
@@ -205,6 +203,24 @@ export default class UI {
 			return;
 		}
 
+		if (target instanceof HTMLSelectElement && target.id === "render-mode") {
+			onCommand({
+				type: "set-render-mode",
+				value: target.value as RenderMode,
+			});
+			this.blurFocus();
+			return;
+		}
+
+		if (target instanceof HTMLSelectElement && target.id === "topology-mode") {
+			onCommand({
+				type: "set-topology-mode",
+				value: target.value as TopologyMode,
+			});
+			this.blurFocus();
+			return;
+		}
+
 		if (!(target instanceof HTMLInputElement)) {
 			return;
 		}
@@ -212,6 +228,14 @@ export default class UI {
 		const stateCommand = target.dataset.field
 			? stateCommandByField[target.dataset.field]
 			: undefined;
+		if (target.dataset.field === "current") {
+			if (!/^\d+$/.test(target.value)) {
+				return;
+			}
+			onCommand({ type: "set-current", value: BigInt(target.value) });
+			this.blurFocus();
+			return;
+		}
 		if (stateCommand) {
 			const value = Number(target.value);
 			if (!Number.isFinite(value)) {
@@ -226,11 +250,6 @@ export default class UI {
 			onCommand({ type: "set-debug", value: target.checked });
 			this.blurFocus();
 			return;
-		}
-
-		if (target.dataset.toggle === "webgl") {
-			onCommand({ type: "set-webgl", value: target.checked });
-			this.blurFocus();
 		}
 	}
 

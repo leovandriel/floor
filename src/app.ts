@@ -1,19 +1,16 @@
 import Canvas from "./canvas";
 import Control, { type Command } from "./control";
 import Input from "./input";
-import { library } from "./library";
+import { detDecycleGetter, lazyDecycleGetter, library } from "./library";
 import Physics from "./physics";
 import { getPlanBySlug } from "./plan";
 import Renderer from "./render";
-import type { Plan } from "./types";
+import type { Plan, TopologyMode } from "./types";
+import { plan } from "./types";
 import UI, { getCanvas, renderError } from "./ui";
 import { readUrlState, type UrlState, UrlStateTracker } from "./url";
 import View from "./view";
 import WebGLRenderer from "./webgl";
-
-declare const __DEV__: boolean;
-
-const isDev = typeof __DEV__ !== "undefined" && __DEV__;
 
 export default class App {
 	context: CanvasRenderingContext2D;
@@ -23,11 +20,13 @@ export default class App {
 	canvasRenderer!: Canvas;
 	physics!: Physics;
 	renderer!: Renderer;
+	basePlan: Plan;
 	plan: Plan;
+	topologyMode: TopologyMode = "none";
 	urlState!: UrlStateTracker;
 	control!: Control;
 	input!: Input;
-	private readonly ui = new UI(isDev);
+	private readonly ui = new UI();
 
 	constructor(
 		context: CanvasRenderingContext2D,
@@ -36,6 +35,7 @@ export default class App {
 		webglRenderer: WebGLRenderer | undefined,
 	) {
 		this.context = context;
+		this.basePlan = plan;
 		this.plan = plan;
 		this.webglCanvasElement = webglCanvasElement;
 		this.webglRenderer = webglRenderer;
@@ -117,6 +117,30 @@ export default class App {
 
 	private applyCommand(command: Command): void {
 		switch (command.type) {
+			case "batch": {
+				let shouldRender = false;
+				let shouldSync = false;
+				for (const item of command.commands) {
+					switch (this.control.applyCommand(item)) {
+						case "render":
+							shouldRender = true;
+							break;
+						case "render-and-sync":
+							shouldRender = true;
+							shouldSync = true;
+							break;
+						case "unhandled":
+							break;
+					}
+				}
+				if (shouldSync) {
+					this.renderAndSync(true);
+				} else if (shouldRender) {
+					this.syncRendererBackend();
+					this.renderer.render();
+				}
+				return;
+			}
 			case "reset":
 				this.resetPlan();
 				return;
@@ -128,6 +152,9 @@ export default class App {
 				return;
 			case "set-plan":
 				this.handlePlanSelection(command.slug);
+				return;
+			case "set-topology-mode":
+				this.handleTopologyModeSelection(command.value);
 				return;
 			default:
 				switch (this.control.applyCommand(command)) {
@@ -166,7 +193,7 @@ export default class App {
 
 	private selectRelativePlan(offset: number): void {
 		const currentIndex = library.findIndex(
-			({ slug }) => slug === this.plan.slug,
+			({ slug }) => slug === this.basePlan.slug,
 		);
 		if (currentIndex < 0) {
 			return;
@@ -178,7 +205,9 @@ export default class App {
 
 	private handlePlanSelection(slug: string): void {
 		if (slug === this.plan.slug) {
-			return;
+			if (slug === this.basePlan.slug) {
+				return;
+			}
 		}
 		const nextPlan = getPlanBySlug(slug);
 		if (!nextPlan) {
@@ -187,7 +216,20 @@ export default class App {
 			return;
 		}
 
-		this.plan = nextPlan;
+		this.basePlan = nextPlan;
+		this.input.clear();
+		this.initializeState();
+		this.syncRendererBackend();
+		this.renderer.render();
+		this.syncControls();
+		this.urlState.updateUrl();
+	}
+
+	private handleTopologyModeSelection(mode: TopologyMode): void {
+		if (mode === this.topologyMode) {
+			return;
+		}
+		this.topologyMode = mode;
 		this.input.clear();
 		this.initializeState();
 		this.syncRendererBackend();
@@ -203,8 +245,10 @@ export default class App {
 	}
 
 	private initializeState(): void {
+		const lastRenderAt = this.renderer?.lastRenderAt;
 		const debug = this.renderer?.debug ?? false;
-		const webgl = this.renderer?.webgl ?? false;
+		const renderMode = this.renderer?.renderMode ?? "canvas";
+		this.plan = this.getPlan();
 		this.view = new View();
 		this.view.resizeToWindow();
 		this.canvasRenderer = new Canvas(this.context, this.view);
@@ -218,7 +262,9 @@ export default class App {
 			this.webglRenderer,
 		);
 		this.renderer.debug = debug;
-		this.renderer.webgl = webgl;
+		this.renderer.renderMode = renderMode;
+		this.renderer.topologyMode = this.topologyMode;
+		this.renderer.lastRenderAt = lastRenderAt;
 		this.syncRendererBackend();
 		this.input = new Input(this.view, this.renderer, (command) =>
 			this.applyCommand(command),
@@ -234,6 +280,7 @@ export default class App {
 			this.view,
 			this.physics,
 			this.renderer,
+			this.topologyMode,
 		);
 	}
 
@@ -243,11 +290,43 @@ export default class App {
 			renderError([`Unknown plan: ${state.path.slug}`]);
 			return;
 		}
-		if (plan !== this.plan) {
-			this.plan = plan;
+		if (
+			plan !== this.basePlan ||
+			state.query.topologyMode !== this.topologyMode
+		) {
+			this.basePlan = plan;
+			this.topologyMode = state.query.topologyMode;
 			this.initializeState();
 		}
+		this.physics.currentTileId = this.getCurrentTileId(state.path.current);
 		this.urlState.applyQueryState(state.query);
+	}
+
+	private getCurrentTileId(id: bigint): bigint {
+		if (!this.plan.deterministic) {
+			return 0n;
+		}
+		try {
+			this.plan.get(id);
+			return id;
+		} catch {
+			return 0n;
+		}
+	}
+
+	private getPlan(): Plan {
+		switch (this.topologyMode) {
+			case "lazy":
+				return plan(
+					this.basePlan.slug,
+					lazyDecycleGetter(this.basePlan.get),
+					false,
+				);
+			case "det":
+				return plan(this.basePlan.slug, detDecycleGetter(this.basePlan.get));
+			case "none":
+				return this.basePlan;
+		}
 	}
 
 	private syncControls(): void {
@@ -256,6 +335,7 @@ export default class App {
 			this.physics,
 			this.renderer,
 			this.plan,
+			this.topologyMode,
 			this.renderer.renderStats,
 		);
 	}
@@ -281,11 +361,11 @@ export default class App {
 		}
 		this.context.canvas.hidden = false;
 		this.context.canvas.style.display = "block";
-		this.webglCanvasElement.hidden = !this.renderer.webgl;
-		this.webglCanvasElement.style.display = this.renderer.webgl
+		this.webglCanvasElement.hidden = !this.renderer.usesWebGL;
+		this.webglCanvasElement.style.display = this.renderer.usesWebGL
 			? "block"
 			: "none";
-		if (this.renderer.webgl) {
+		if (this.renderer.usesWebGL) {
 			this.canvasRenderer.clear();
 		} else if (this.webglRenderer) {
 			this.webglRenderer.clear(this.renderer.backgroundColor);

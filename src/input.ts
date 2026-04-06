@@ -1,7 +1,7 @@
-import type { Command, ControlCommand } from "./control";
+import type { Command, ControlAction, ControlCommand } from "./control";
 import type Renderer from "./render";
 import type { MouseAction, Point } from "./types";
-import { point } from "./types";
+import { point, renderModes, topologyModes } from "./types";
 import { isControlsTarget } from "./ui";
 import type View from "./view";
 
@@ -16,14 +16,14 @@ const commandByCode: Record<string, ControlCommand> = {
 	KeyS: "move-backward",
 	KeyA: "move-left",
 	KeyD: "move-right",
-	Digit0: "warp-in",
-	Numpad0: "warp-in",
-	Digit9: "warp-out",
-	Numpad9: "warp-out",
-	Digit8: "zoom-in",
-	Numpad8: "zoom-in",
-	Digit7: "zoom-out",
-	Numpad7: "zoom-out",
+	Digit1: "warp-in",
+	Numpad1: "warp-in",
+	Digit2: "warp-out",
+	Numpad2: "warp-out",
+	Digit4: "zoom-in",
+	Numpad4: "zoom-in",
+	Digit3: "zoom-out",
+	Numpad3: "zoom-out",
 	Digit6: "scale-up",
 	Numpad6: "scale-up",
 	Digit5: "scale-down",
@@ -133,10 +133,10 @@ export default class Input {
 		}
 
 		switch (event.code) {
-			case "KeyO":
+			case "KeyF":
 				this.onCommand({ type: "select-prev-plan" });
 				return;
-			case "KeyP":
+			case "KeyG":
 				this.onCommand({ type: "select-next-plan" });
 				return;
 			case "KeyX":
@@ -145,17 +145,27 @@ export default class Input {
 					value: !this.renderer.debug,
 				});
 				return;
-			case "KeyG":
+			case "KeyZ": {
+				const index = renderModes.indexOf(this.renderer.renderMode);
 				this.onCommand({
-					type: "set-webgl",
-					value: !this.renderer.webgl,
+					type: "set-render-mode",
+					value: renderModes[(index + 1) % renderModes.length],
 				});
 				return;
+			}
+			case "KeyC": {
+				const index = topologyModes.indexOf(this.renderer.topologyMode);
+				this.onCommand({
+					type: "set-topology-mode",
+					value: topologyModes[(index + 1) % topologyModes.length],
+				});
+				return;
+			}
 			case "KeyR":
 				this.onCommand({ type: "reset" });
 				return;
-			case "Digit0":
-			case "Numpad0":
+			case "Digit1":
+			case "Numpad1":
 				this.onCommand({ type: "warp-in" });
 				return;
 			default:
@@ -196,6 +206,7 @@ export default class Input {
 			),
 		);
 
+		const commands: ControlAction[] = [];
 		for (const command of commandOrder) {
 			if (!activeCommands.has(command)) {
 				continue;
@@ -203,10 +214,15 @@ export default class Input {
 			if (activeCommands.has(oppositeCommand[command])) {
 				continue;
 			}
-			this.onCommand({
+			commands.push({
 				type: command,
 				deltaSeconds,
 			});
+		}
+		if (commands.length === 1) {
+			this.onCommand(commands[0]);
+		} else if (commands.length > 1) {
+			this.onCommand({ type: "batch", commands });
 		}
 
 		if (this.heldCodes.size > 0) {

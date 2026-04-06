@@ -2,31 +2,26 @@ import assert from "./assert";
 
 const INV_UINT32 = 1 / 2 ** 32;
 
-function integerToNatural(value: number): number {
-	assert(Number.isSafeInteger(value), "value must be a safe integer", value);
-	return value >= 0 ? value * 2 : -value * 2 - 1;
+function integerToNatural(value: bigint): bigint {
+	return value >= 0n ? value * 2n : -value * 2n - 1n;
 }
 
-function naturalToInteger(value: number): number {
-	assert(
-		Number.isSafeInteger(value) && value >= 0,
-		"value must be natural",
-		value,
-	);
-	return value % 2 === 0 ? value / 2 : -(value + 1) / 2;
+function naturalToInteger(value: bigint): bigint {
+	assert(value >= 0n, "value must be natural", value);
+	return value % 2n === 0n ? value / 2n : -(value + 1n) / 2n;
 }
 
-function mortonDecode(value: number, dimension: number): number[] {
-	const vector = Array<number>(dimension).fill(0);
+function mortonDecode(value: bigint, dimension: number): bigint[] {
+	const vector = Array<bigint>(dimension).fill(0n);
 	let plane = 0;
 	let remaining = value;
 
-	while (remaining > 0) {
-		for (let axis = 0; axis < dimension && remaining > 0; axis += 1) {
-			if ((remaining & 1) === 1) {
-				vector[axis] += 2 ** plane;
+	while (remaining > 0n) {
+		for (let axis = 0; axis < dimension && remaining > 0n; axis += 1) {
+			if ((remaining & 1n) === 1n) {
+				vector[axis] += 1n << BigInt(plane);
 			}
-			remaining = Math.floor(remaining / 2);
+			remaining /= 2n;
 		}
 		plane += 1;
 	}
@@ -34,8 +29,8 @@ function mortonDecode(value: number, dimension: number): number[] {
 	return vector;
 }
 
-function mortonEncode(vector: readonly number[]): number {
-	let value = 0;
+function mortonEncode(vector: readonly bigint[]): bigint {
+	let value = 0n;
 	let plane = 0;
 	let hasBitsRemaining = true;
 
@@ -43,11 +38,11 @@ function mortonEncode(vector: readonly number[]): number {
 		hasBitsRemaining = false;
 
 		for (let axis = 0; axis < vector.length; axis += 1) {
-			const bit = Math.floor(vector[axis] / 2 ** plane) % 2;
-			if (bit === 1) {
-				value += 2 ** (plane * vector.length + axis);
+			const bit = (vector[axis] >> BigInt(plane)) & 1n;
+			if (bit === 1n) {
+				value += 1n << BigInt(plane * vector.length + axis);
 			}
-			if (Math.floor(vector[axis] / 2 ** (plane + 1)) > 0) {
+			if (vector[axis] >> BigInt(plane + 1) > 0n) {
 				hasBitsRemaining = true;
 			}
 		}
@@ -58,35 +53,22 @@ function mortonEncode(vector: readonly number[]): number {
 	return value;
 }
 
-export function naturalToVector(value: number, dimension: number): number[] {
+export function naturalToVector(value: bigint, dimension: number): bigint[] {
 	assert(
 		Number.isInteger(dimension) && dimension >= 1,
 		"dimension must be a positive integer",
 	);
-	assert(
-		Number.isSafeInteger(value) && value >= 0,
-		"value must be a natural number",
-		value,
-	);
+	assert(value >= 0n, "value must be a natural number", value);
 	return mortonDecode(value, dimension).map(naturalToInteger);
 }
 
-export function vectorToNatural(vector: readonly number[]): number {
+export function vectorToNatural(vector: readonly bigint[]): bigint {
 	assert(vector.length > 0, "vector must have at least one dimension");
-	vector.forEach((value) => {
-		assert(
-			Number.isSafeInteger(value),
-			"vector value must be a safe integer",
-			value,
-		);
-	});
-
 	return mortonEncode(vector.map(integerToNatural));
 }
 
-export function random(seed: number): number {
-	assert(Number.isInteger(seed), "seed must be an integer", seed);
-	let x = seed | 0;
+export function random(seed: bigint): number {
+	let x = Number(BigInt.asUintN(32, seed));
 	x ^= x >>> 16;
 	x = Math.imul(x, 0x7feb352d);
 	x ^= x >>> 15;

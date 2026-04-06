@@ -1,24 +1,28 @@
+import { rotateScale } from "./geometry";
 import type Physics from "./physics";
 import { getPlanBySlug } from "./plan";
 import type Renderer from "./render";
-import type { Plan } from "./types";
-import { point } from "./types";
+import type { Plan, Point, RenderMode, TileId, TopologyMode } from "./types";
+import { point, renderModes, topologyModes } from "./types";
 import type View from "./view";
 
 export interface UrlQueryState {
-	current: number;
 	x: number;
 	y: number;
 	rotation: number;
+	worldRotation: number | undefined;
+	worldPosition: Point | undefined;
 	scale: number;
 	factor: number;
 	range: number;
+	topologyMode: TopologyMode;
 	debug: boolean;
-	webgl: boolean;
+	renderMode: RenderMode;
 }
 
 export interface UrlPathState {
 	slug: string;
+	current: TileId;
 }
 
 export interface UrlState {
@@ -27,32 +31,37 @@ export interface UrlState {
 }
 
 const urlQueryKey = {
-	current: "c",
 	x: "x",
 	y: "y",
 	rotation: "r",
+	worldRotation: "k",
+	worldX: "u",
+	worldY: "v",
 	scale: "s",
 	factor: "f",
 	range: "g",
+	topologyMode: "n",
 	debug: "d",
-	webgl: "w",
+	renderMode: "m",
 } as const;
 
 const urlUpdateIntervalMs = 100;
-const defaultPlanSlug = "square";
+const defaultPlanSlug = "grid";
 
 const defaultUrlState: UrlState = {
-	path: { slug: defaultPlanSlug },
+	path: { slug: defaultPlanSlug, current: 0n },
 	query: {
-		current: 0,
 		x: 0.5,
 		y: 0.2,
 		rotation: 0,
+		worldRotation: undefined,
+		worldPosition: undefined,
 		scale: 0.2,
 		factor: 1,
 		range: 0.5,
+		topologyMode: "none",
 		debug: false,
-		webgl: false,
+		renderMode: "canvas",
 	},
 };
 
@@ -66,12 +75,11 @@ function parseNumberParam(
 	return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function parseIntegerParam(
-	params: URLSearchParams,
-	key: string,
-): number | undefined {
-	const parsed = parseNumberParam(params, key);
-	return parsed !== undefined && Number.isInteger(parsed) ? parsed : undefined;
+function parseModeIndex(value: string | null): number | undefined {
+	if (value === null || !/^\d+$/.test(value)) {
+		return undefined;
+	}
+	return Number(value);
 }
 
 function parseBooleanParam(params: URLSearchParams, key: string): boolean {
@@ -94,19 +102,31 @@ export function formatStateNumber(value: number): string {
 	return value.toFixed(6).replace(/\.?0+$/, "");
 }
 
+function getDefaultWorldState(
+	query: Pick<UrlQueryState, "x" | "y" | "rotation" | "scale">,
+): {
+	worldRotation: number;
+	worldPosition: Point;
+} {
+	const delta = rotateScale(query, -query.rotation, query.scale);
+	return {
+		worldRotation: query.rotation,
+		worldPosition: delta,
+	};
+}
+
 export function parseUrlQueryState(
 	params: URLSearchParams,
 	_plan: Plan,
 ): UrlQueryState | undefined {
 	const defaults = defaultUrlState.query;
-	const current = Math.max(
-		parseIntegerParam(params, urlQueryKey.current) ?? defaults.current,
-		0,
-	);
 	const x = parseNumberParam(params, urlQueryKey.x) ?? defaults.x;
 	const y = parseNumberParam(params, urlQueryKey.y) ?? defaults.y;
 	const rotation =
 		parseNumberParam(params, urlQueryKey.rotation) ?? defaults.rotation;
+	const worldRotation = parseNumberParam(params, urlQueryKey.worldRotation);
+	const worldX = parseNumberParam(params, urlQueryKey.worldX);
+	const worldY = parseNumberParam(params, urlQueryKey.worldY);
 	const scale = Math.max(
 		parseNumberParam(params, urlQueryKey.scale) ?? defaults.scale,
 		defaults.scale,
@@ -119,10 +139,30 @@ export function parseUrlQueryState(
 		parseNumberParam(params, urlQueryKey.range) ?? defaults.range,
 		defaults.range,
 	);
+	const topologyMode =
+		parseTopologyModeParam(params.get(urlQueryKey.topologyMode)) ??
+		defaults.topologyMode;
 	const debug = parseBooleanParam(params, urlQueryKey.debug);
-	const webgl = parseBooleanParam(params, urlQueryKey.webgl);
+	const renderMode =
+		parseRenderModeParam(params.get(urlQueryKey.renderMode)) ??
+		(parseBooleanParam(params, "w") ? "checker" : defaults.renderMode);
 
-	return { current, x, y, rotation, scale, factor, range, debug, webgl };
+	return {
+		x,
+		y,
+		rotation,
+		worldRotation,
+		worldPosition:
+			worldX !== undefined && worldY !== undefined
+				? point(worldX, worldY)
+				: undefined,
+		scale,
+		factor,
+		range,
+		topologyMode,
+		debug,
+		renderMode,
+	};
 }
 
 export function readUrlQueryState(
@@ -137,11 +177,17 @@ export function parsePlanSlug(pathname: string): string | undefined {
 	return pathname.split("/").filter(Boolean)[0];
 }
 
+function parsePathTileId(pathname: string): TileId | undefined {
+	const value = pathname.split("/").filter(Boolean)[1];
+	return value && /^\d+$/.test(value) ? BigInt(value) : undefined;
+}
+
 export function readUrlPathState(
 	pathname: string = window.location.pathname,
 ): UrlPathState {
 	return {
 		slug: parsePlanSlug(pathname) ?? defaultPlanSlug,
+		current: parsePathTileId(pathname) ?? defaultUrlState.path.current,
 	};
 }
 
@@ -150,10 +196,23 @@ export function readUrlState(
 	search: string = window.location.search,
 ): UrlState {
 	const path = readUrlPathState(pathname);
-	const plan = getPlanBySlug(path.slug);
+	const legacyTopologyMode =
+		path.slug === "treeMaze"
+			? "lazy"
+			: path.slug === "detMaze"
+				? "det"
+				: undefined;
+	const slug = legacyTopologyMode ? "flatMaze" : path.slug;
+	const plan = getPlanBySlug(slug);
+	const query =
+		(plan && readUrlQueryState(plan, search)) ?? defaultUrlState.query;
 	return {
-		path,
-		query: (plan && readUrlQueryState(plan, search)) ?? defaultUrlState.query,
+		path: { slug, current: path.current },
+		query:
+			legacyTopologyMode &&
+			query.topologyMode === defaultUrlState.query.topologyMode
+				? { ...query, topologyMode: legacyTopologyMode }
+				: query,
 	};
 }
 
@@ -166,30 +225,34 @@ export class UrlStateTracker {
 		private readonly view: View,
 		private readonly physics: Physics,
 		private readonly renderer: Renderer,
+		private readonly topologyMode: TopologyMode,
 	) {}
 
 	applyQueryState(query: UrlQueryState): void {
-		this.physics.currentTileId = query.current;
 		this.physics.position = point(query.x, query.y);
 		this.physics.rotation = query.rotation;
 		this.physics.scale = query.scale;
+		if (
+			query.worldRotation !== undefined &&
+			query.worldPosition !== undefined
+		) {
+			this.physics.worldRotation = query.worldRotation;
+			this.physics.worldOffset = query.worldPosition;
+		} else {
+			this.physics.resetWorld();
+		}
 		this.view.factor = query.factor;
 		this.view.range = query.range;
 		this.renderer.debug = query.debug;
-		this.renderer.webgl = query.webgl;
+		this.renderer.renderMode = query.renderMode;
 		this.physics.simulateSnap();
 	}
 
 	updateUrl(): void {
 		const defaults = defaultUrlState.query;
 		const params = new URLSearchParams(window.location.search);
-		const state = this.serializeRuntime();
+		const state = this.serializeState();
 		const { query } = state;
-		if (query.current !== defaults.current) {
-			params.set(urlQueryKey.current, String(query.current));
-		} else {
-			params.delete(urlQueryKey.current);
-		}
 		if (query.x !== defaults.x) {
 			params.set(urlQueryKey.x, formatStateNumber(query.x));
 		} else {
@@ -204,6 +267,24 @@ export class UrlStateTracker {
 			params.set(urlQueryKey.rotation, formatStateNumber(query.rotation));
 		} else {
 			params.delete(urlQueryKey.rotation);
+		}
+		const worldDefaults = getDefaultWorldState(query);
+		const worldRotation = query.worldRotation ?? worldDefaults.worldRotation;
+		const worldPosition = query.worldPosition ?? worldDefaults.worldPosition;
+		if (worldRotation !== worldDefaults.worldRotation) {
+			params.set(urlQueryKey.worldRotation, formatStateNumber(worldRotation));
+		} else {
+			params.delete(urlQueryKey.worldRotation);
+		}
+		if (worldPosition.x !== worldDefaults.worldPosition.x) {
+			params.set(urlQueryKey.worldX, formatStateNumber(worldPosition.x));
+		} else {
+			params.delete(urlQueryKey.worldX);
+		}
+		if (worldPosition.y !== worldDefaults.worldPosition.y) {
+			params.set(urlQueryKey.worldY, formatStateNumber(worldPosition.y));
+		} else {
+			params.delete(urlQueryKey.worldY);
 		}
 		if (query.scale !== defaults.scale) {
 			params.set(urlQueryKey.scale, formatStateNumber(query.scale));
@@ -220,10 +301,29 @@ export class UrlStateTracker {
 		} else {
 			params.delete(urlQueryKey.range);
 		}
+		if (query.topologyMode !== defaults.topologyMode) {
+			params.set(
+				urlQueryKey.topologyMode,
+				String(topologyModes.indexOf(query.topologyMode)),
+			);
+		} else {
+			params.delete(urlQueryKey.topologyMode);
+		}
 		setBooleanParam(params, urlQueryKey.debug, query.debug);
-		setBooleanParam(params, urlQueryKey.webgl, query.webgl);
+		if (query.renderMode !== defaults.renderMode) {
+			params.set(
+				urlQueryKey.renderMode,
+				String(renderModes.indexOf(query.renderMode)),
+			);
+		} else {
+			params.delete(urlQueryKey.renderMode);
+		}
+		params.delete("w");
 		const nextSearch = params.toString();
-		const nextPath = `/${state.path.slug}`;
+		const nextPath =
+			state.path.current === defaultUrlState.path.current
+				? `/${state.path.slug}`
+				: `/${state.path.slug}/${state.path.current}`;
 		const nextUrl = `${nextPath}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`;
 		try {
 			window.history.replaceState(null, "", nextUrl);
@@ -255,20 +355,57 @@ export class UrlStateTracker {
 		}, delay);
 	}
 
-	private serializeRuntime(): UrlState {
+	private serializeState(): UrlState {
 		return {
-			path: { slug: this.plan.slug },
-			query: {
+			path: {
+				slug: this.plan.slug,
 				current: this.physics.currentTileId,
+			},
+			query: {
 				x: this.physics.position.x,
 				y: this.physics.position.y,
 				rotation: this.physics.rotation,
+				worldRotation: this.physics.worldRotation,
+				worldPosition: this.physics.worldOffset,
 				scale: this.physics.scale,
 				factor: this.view.factor,
 				range: this.view.range,
+				topologyMode: this.topologyMode,
 				debug: this.renderer.debug,
-				webgl: this.renderer.webgl,
+				renderMode: this.renderer.renderMode,
 			},
 		};
+	}
+}
+function parseTopologyModeParam(
+	value: string | null,
+): TopologyMode | undefined {
+	const index = parseModeIndex(value);
+	if (index !== undefined) {
+		return topologyModes[index];
+	}
+	switch (value) {
+		case "none":
+		case "lazy":
+		case "det":
+			return value;
+		default:
+			return undefined;
+	}
+}
+
+function parseRenderModeParam(value: string | null): RenderMode | undefined {
+	const index = parseModeIndex(value);
+	if (index !== undefined) {
+		return renderModes[index];
+	}
+	switch (value) {
+		case "canvas":
+		case "webgl":
+		case "checker":
+		case "light":
+			return value;
+		default:
+			return undefined;
 	}
 }

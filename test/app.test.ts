@@ -8,7 +8,7 @@ import { library } from "../src/library";
 import { getPlanBySlug } from "../src/plan";
 import { point } from "../src/types";
 
-const defaultPlanSlug = "square";
+const defaultPlanSlug = "grid";
 
 class FakeElement {}
 
@@ -187,7 +187,7 @@ function createKeyEvent(code: string): KeyboardEvent {
 	} as KeyboardEvent;
 }
 
-test("KeyP selects the next plan with wraparound", () => {
+test("KeyG selects the next plan with wraparound", () => {
 	const commands: unknown[] = [];
 	const input = new Input({} as never, {} as never, (command) =>
 		commands.push(command),
@@ -206,14 +206,14 @@ test("KeyP selects the next plan with wraparound", () => {
 		selectedSlugs.push(slug);
 	};
 
-	input.handleKeyDown(createKeyEvent("KeyP"));
+	input.handleKeyDown(createKeyEvent("KeyG"));
 
 	assert.deepEqual(commands, [{ type: "select-next-plan" }]);
 	appPrivate.applyCommand(commands[0]);
 	assert.deepEqual(selectedSlugs, [library[0].slug]);
 });
 
-test("KeyO selects the previous plan with wraparound", () => {
+test("KeyF selects the previous plan with wraparound", () => {
 	const commands: unknown[] = [];
 	const input = new Input({} as never, {} as never, (command) =>
 		commands.push(command),
@@ -233,7 +233,7 @@ test("KeyO selects the previous plan with wraparound", () => {
 		selectedSlugs.push(slug);
 	};
 
-	input.handleKeyDown(createKeyEvent("KeyO"));
+	input.handleKeyDown(createKeyEvent("KeyF"));
 
 	assert.deepEqual(commands, [{ type: "select-prev-plan" }]);
 	appPrivate.applyCommand(commands[0]);

@@ -1,7 +1,7 @@
 import * as math from "./linalg";
 import type Physics from "./physics";
 import type Renderer from "./render";
-import type { Plan, Point } from "./types";
+import type { Plan, Point, RenderMode, TileId, TopologyMode } from "./types";
 import { point } from "./types";
 import type View from "./view";
 
@@ -20,7 +20,6 @@ export type ControlCommand =
 	| "warp-out";
 
 export type SetNumberCommand =
-	| "set-current"
 	| "set-x"
 	| "set-y"
 	| "set-rotation"
@@ -31,18 +30,21 @@ export type SetNumberCommand =
 export type ControlAction =
 	| { type: ControlCommand; deltaSeconds?: number }
 	| { type: "drag-mouse"; delta: Point }
+	| { type: "set-current"; value: TileId }
 	| { type: SetNumberCommand; value: number }
 	| { type: "set-debug"; value: boolean }
-	| { type: "set-webgl"; value: boolean };
+	| { type: "set-render-mode"; value: RenderMode }
+	| { type: "set-topology-mode"; value: TopologyMode };
 
 export type Command =
 	| ControlAction
+	| { type: "batch"; commands: ControlAction[] }
 	| { type: "reset" }
 	| { type: "select-prev-plan" }
 	| { type: "select-next-plan" }
 	| { type: "set-plan"; slug: string };
 
-const linearVelocity = 0.2;
+const linearVelocity = 0.3;
 const angularVelocity = 0.3;
 
 export type ControlResult = "render" | "render-and-sync" | "unhandled";
@@ -89,9 +91,11 @@ export default class Control {
 			case "set-debug":
 				this.renderer.debug = command.value;
 				return "render-and-sync";
-			case "set-webgl":
-				this.renderer.webgl = command.value;
+			case "set-render-mode":
+				this.renderer.renderMode = command.value;
 				return "render-and-sync";
+			case "set-topology-mode":
+				return "unhandled";
 		}
 	}
 
@@ -152,29 +156,36 @@ export default class Control {
 	}
 
 	private applyStateCommand(
-		command: Extract<ControlAction, { type: SetNumberCommand }>,
+		command: Extract<
+			ControlAction,
+			{ type: "set-current" } | { type: SetNumberCommand }
+		>,
 	): ControlResult {
 		switch (command.type) {
 			case "set-current":
-				this.physics.currentTileId = Math.max(0, Math.round(command.value));
+				this.physics.currentTileId = command.value;
 				this.physics.simulateSnap();
+				this.physics.resetWorld();
 				return "render-and-sync";
 			case "set-x":
 				this.physics.position.x = command.value;
 				this.physics.simulateSnap();
+				this.physics.resetWorld();
 				return "render-and-sync";
 			case "set-y":
 				this.physics.position.y = command.value;
 				this.physics.simulateSnap();
+				this.physics.resetWorld();
 				return "render-and-sync";
 			case "set-rotation":
-				this.physics.rotation = command.value;
+				this.physics.simulateTurn(command.value - this.physics.rotation);
 				return "render-and-sync";
 			case "set-scale":
 				if (command.value <= 0) {
 					return "render-and-sync";
 				}
 				this.physics.scale = command.value;
+				this.physics.resetWorld();
 				return "render-and-sync";
 			case "set-factor":
 				if (command.value <= 0) {

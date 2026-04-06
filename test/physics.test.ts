@@ -39,7 +39,7 @@ test("handleMove wraps through the tunnel and preserves heading", () => {
 
 	physics.simulateMove(point(0.2, 0.0));
 
-	assert.equal(physics.currentTileId, 0);
+	assert.equal(physics.currentTileId, 0n);
 	assert.ok(Math.abs(physics.position.x - 0.6) < 1e-9);
 	assert.ok(Math.abs(physics.position.y - 0.4) < 1e-9);
 	assert.equal(physics.rotation, 0);
@@ -72,7 +72,7 @@ test("handleMove reflects off a wall without changing tile or heading", () => {
 
 	physics.simulateMove(point(-0.2, 0.0));
 
-	assert.equal(physics.currentTileId, 0);
+	assert.equal(physics.currentTileId, 0n);
 	assert.ok(Math.abs(physics.position.x - 0.05001) < 1e-9);
 	assert.ok(Math.abs(physics.position.y - 0.30000000000000004) < 1e-9);
 	assert.equal(physics.rotation, 0);
@@ -85,7 +85,7 @@ test("handleMove preserves heading across the square short-edge seam", () => {
 
 	physics.simulateMove(point(-linearVelocity, 0));
 
-	assert.equal(physics.currentTileId, 0);
+	assert.equal(physics.currentTileId, 0n);
 	assert.ok(Math.abs(physics.position.x - 0.9499986) < 1e-9);
 	assert.ok(Math.abs(physics.position.y - 0.050001399999999994) < 1e-9);
 	assert.ok(Math.abs(physics.rotation - -0.25) < 1e-9);
@@ -98,7 +98,7 @@ test("handleMove wraps smoothly across the hex side seam", () => {
 
 	physics.simulateMove(point(-linearVelocity, 0));
 
-	assert.equal(physics.currentTileId, 0);
+	assert.equal(physics.currentTileId, 0n);
 	assert.ok(Math.abs(physics.position.x - 0.868398908170558) < 1e-9);
 	assert.ok(Math.abs(physics.position.y - 0.050001279456296066) < 1e-9);
 	assert.ok(Math.abs(physics.rotation - -0.16667070989350627) < 1e-9);
@@ -111,4 +111,27 @@ test("isInsideTile accepts interior points and rejects exterior points", () => {
 	assert.equal(isInsideTile(point(0.5, 0.1), shape), true);
 	assert.equal(isInsideTile(point(-0.1, 0.1), shape), false);
 	assert.equal(isInsideTile(point(0.5, 0.6), shape), false);
+});
+
+test("simulateTurn preserves world-space points on the current tile", () => {
+	const physics = createPhysics(planHex);
+	const before = physics.getWorldPoint(point(1.0, 0.0));
+
+	physics.simulateTurn(0.25);
+
+	const after = physics.getWorldPoint(point(1.0, 0.0));
+	assert.ok(Math.abs(after.x - before.x) < 1e-9);
+	assert.ok(Math.abs(after.y - before.y) < 1e-9);
+});
+
+test("simulateSnap preserves world-space points across seam transport", () => {
+	const physics = createPhysics(planSquare);
+	physics.position = point(-0.02, 0.05);
+	const before = physics.getWorldPoint(point(1.0, 0.0));
+
+	physics.simulateSnap();
+
+	const after = physics.getWorldPoint(point(1.0, 0.0));
+	assert.ok(Math.abs(after.x - before.x) < 1e-9);
+	assert.ok(Math.abs(after.y - before.y) < 1e-9);
 });

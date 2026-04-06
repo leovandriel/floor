@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { arrayPlan } from "../src/library";
+import { arrayGetter } from "../src/library";
 import { plan, point, side, tile } from "../src/types";
 
 test("side rejects negative ids and neighbors", () => {
-	assert.throws(() => side(-1, 0), /Invalid side tileId/);
-	assert.throws(() => side(0, -1), /Invalid side neighbor/);
+	assert.throws(() => side(-1n, 0), /Invalid side tileId/);
+	assert.throws(() => side(0n, -1), /Invalid side sideIndex/);
 });
 
 test("tile rejects non-positive heights", () => {
@@ -23,16 +23,15 @@ test("plan rejects an empty slug", () => {
 	);
 });
 
-test("arrayPlan rejects empty tile lists", () => {
-	assert.throws(() => arrayPlan("empty", []), /must include at least one tile/);
+test("arrayGetter rejects empty tile lists", () => {
+	assert.throws(() => arrayGetter([]), /must include at least one tile/);
 });
 
-test("arrayPlan get rejects invalid ids", () => {
-	const single = arrayPlan("single", [
+test("arrayGetter rejects invalid ids", () => {
+	const single = arrayGetter([
 		tile(point(0.5, 0.5), undefined, undefined, undefined),
 	]);
 
-	assert.throws(() => single.get(-1), /Tile id out of range/);
-	assert.throws(() => single.get(1.5), /Invalid tile id/);
-	assert.throws(() => single.get(1), /Tile id out of range/);
+	assert.throws(() => single(-1n), /Invalid tile id/);
+	assert.throws(() => single(1n), /Tile id out of range/);
 });
