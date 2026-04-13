@@ -7,7 +7,7 @@ import { point } from "./types";
 import type View from "./view";
 
 type DrawMode = "fill" | "stroke" | "both";
-const tileStrokePixels = 0.5;
+const cellStrokePixels = 0.5;
 
 export default class Canvas {
 	private readonly context: CanvasRenderingContext2D;
@@ -115,25 +115,25 @@ export default class Canvas {
 
 	draw(batch: RenderBatch, renderer: Renderer): void {
 		this.drawBackground(renderer.backgroundColor);
-		this.drawTiles(batch);
+		this.drawCells(batch);
 		this.drawWalls(batch);
 		this.drawAvatars(batch, renderer);
 		this.drawLabels(batch, renderer);
-		this.drawCornerWalls(renderer);
+		this.drawVertexWalls(renderer);
 	}
 
-	drawTiles(batch: RenderBatch): void {
-		for (const tile of batch.tiles) {
-			this.setColor(tile.color);
-			this.setPixelWidth(tileStrokePixels);
-			this.drawPath(tile.polygon, "both");
+	drawCells(batch: RenderBatch): void {
+		for (const cell of batch.cells) {
+			this.setColor(cell.color);
+			this.setPixelWidth(cellStrokePixels);
+			this.drawPath(cell.polygon, "both");
 		}
 	}
 
 	drawWalls(batch: RenderBatch): void {
 		for (const wall of batch.walls) {
 			this.setColor(getWallColor(wall.start, wall.end));
-			this.setPixelWidth(tileStrokePixels);
+			this.setPixelWidth(cellStrokePixels);
 			this.drawPath(wall.polygon, "both");
 		}
 	}
@@ -146,20 +146,20 @@ export default class Canvas {
 	}
 
 	drawLabels(batch: RenderBatch, renderer: Renderer): void {
-		for (const tile of batch.tiles) {
-			if (!tile.label || !tile.labelPosition) {
+		for (const cell of batch.cells) {
+			if (!cell.label || !cell.labelPosition) {
 				continue;
 			}
 			this.setColor(withAlpha(renderer.wallColor, 0.45));
-			this.drawText(tile.labelPosition, tile.label);
+			this.drawText(cell.labelPosition, cell.label);
 		}
 	}
 
-	drawCornerWalls(renderer: Renderer): void {
+	drawVertexWalls(renderer: Renderer): void {
 		if (!renderer.debug) {
 			return;
 		}
-		for (const [corner, wall] of renderer.getDebugCornerWalls()) {
+		for (const [vertex, wall] of renderer.getDebugVertexWalls()) {
 			if (!wall) {
 				continue;
 			}
@@ -172,8 +172,8 @@ export default class Canvas {
 				);
 				this.setPixelWidth(1);
 				this.drawSegment(
-					corner,
-					point(corner.x + direction.x, corner.y + direction.y),
+					vertex,
+					point(vertex.x + direction.x, vertex.y + direction.y),
 				);
 			}
 		}

@@ -1,37 +1,43 @@
 import {
+	getCellBounds,
+	getCellVertices,
+	getFaceSegment,
 	getInsetEdge,
 	getInwardNormal,
+	isInsideCell,
 	rotateScale,
 	transitionPosition,
 	transitionRotation,
 	transitionScale,
 } from "./geometry";
 import * as math from "./linalg";
-import { ensureCornerWalls } from "./plan";
-import { getSideCorners, getTileCorners } from "./topology";
-import type { Plan, Point, ShapeSide, TileId } from "./types";
+import { ensureVertexWalls } from "./plan";
+import { triangleFaceIndices, triangleVertexIndices } from "./topology";
+import type {
+	CameraState,
+	CellId,
+	Plan,
+	Point,
+	ShapeFace,
+	SupportState,
+} from "./types";
 import { point, segment } from "./types";
 
 export { transitionPosition } from "./geometry";
 
 const epsilon = 1e-5;
 
-export function isInsideTile(position: Point, shape: Point): boolean {
-	if (position.y < -epsilon || position.y > shape.y + epsilon) {
-		return false;
-	}
-	const min = (shape.x * position.y) / shape.y;
-	const max = min + 1 - position.y / shape.y;
-	return position.x >= min - epsilon && position.x <= max + epsilon;
-}
-
 export default class Physics {
-	currentTileId: TileId = 0n;
-	position = point(0.5, 0.25);
-	rotation = 0;
-	worldRotation = 0;
-	scale = 0.2;
-	worldOffset = point(0.0, 0.0);
+	private readonly supportState: SupportState = {
+		cellId: 0n,
+		position: point(0.5, 0.25),
+		rotation: 0,
+		scale: 0.2,
+	};
+	private readonly cameraState: CameraState = {
+		rotation: 0,
+		offset: point(0.0, 0.0),
+	};
 	avatarRadius = 0.01;
 	plan: Plan;
 
@@ -40,8 +46,68 @@ export default class Physics {
 		this.resetWorld();
 	}
 
+	get support(): SupportState {
+		return this.supportState;
+	}
+
+	get camera(): CameraState {
+		return this.cameraState;
+	}
+
+	get currentCellId(): CellId {
+		return this.supportState.cellId;
+	}
+
+	set currentCellId(value: CellId) {
+		this.supportState.cellId = value;
+	}
+
+	get position(): Point {
+		return this.supportState.position;
+	}
+
+	set position(value: Point) {
+		this.supportState.position = value;
+	}
+
+	get rotation(): number {
+		return this.supportState.rotation;
+	}
+
+	set rotation(value: number) {
+		this.supportState.rotation = value;
+	}
+
+	get scale(): number {
+		return this.supportState.scale;
+	}
+
+	set scale(value: number) {
+		this.supportState.scale = value;
+	}
+
+	get worldRotation(): number {
+		return this.cameraState.rotation;
+	}
+
+	set worldRotation(value: number) {
+		this.cameraState.rotation = value;
+	}
+
+	get worldOffset(): Point {
+		return this.cameraState.offset;
+	}
+
+	set worldOffset(value: Point) {
+		this.cameraState.offset = value;
+	}
+
 	private worldDelta(position: Point): Point {
-		return rotateScale(position, -this.worldRotation, this.scale);
+		return rotateScale(
+			position,
+			-this.cameraState.rotation,
+			this.supportState.scale,
+		);
 	}
 
 	getWorldPoint(position: Point): Point {
@@ -49,38 +115,46 @@ export default class Physics {
 	}
 
 	private setWorldPoint(position: Point, worldPosition: Point): void {
-		this.worldOffset = math.add(worldPosition, this.worldDelta(position));
+		this.cameraState.offset = math.add(
+			worldPosition,
+			this.worldDelta(position),
+		);
 	}
 
 	resetWorld(): void {
-		this.worldRotation = this.rotation;
-		this.setWorldPoint(this.position, point(0.0, 0.0));
+		this.cameraState.rotation = this.supportState.rotation;
+		this.setWorldPoint(this.supportState.position, point(0.0, 0.0));
 	}
 
-	private transport(from: ShapeSide, to: ShapeSide): void {
+	private transport(from: ShapeFace, to: ShapeFace): void {
 		const turn = transitionRotation(from, to);
-		const worldPosition = this.getWorldPoint(this.position);
-		this.rotation += turn;
-		this.worldRotation += turn;
-		this.position = transitionPosition(this.position, from, to);
-		this.scale *= transitionScale(from, to);
-		this.setWorldPoint(this.position, worldPosition);
+		const worldPosition = this.getWorldPoint(this.supportState.position);
+		this.supportState.rotation += turn;
+		this.cameraState.rotation += turn;
+		this.supportState.position = transitionPosition(
+			this.supportState.position,
+			from,
+			to,
+		);
+		this.supportState.scale *= transitionScale(from, to);
+		this.setWorldPoint(this.supportState.position, worldPosition);
 	}
 
 	simulatePhysics(next: Point, wallCount = 0): Point {
 		if (wallCount >= 2) return this.position;
-		const { shape, sides } = this.plan.get(this.currentTileId);
+		const { shape, faces } = this.plan.get(this.currentCellId);
 		const avatarRadiusWorld = this.avatarRadius / this.scale;
-		const corners = getTileCorners(shape);
-		for (let sideIndex = 0; sideIndex < 3; sideIndex++) {
-			const [sideStartIndex, sideEndIndex] = getSideCorners(sideIndex);
-			const sideStart = corners[sideStartIndex];
-			const sideEnd = corners[sideEndIndex];
-			const side = sides[sideIndex];
+		const vertices = getCellVertices(shape);
+		for (const faceIndex of triangleFaceIndices) {
+			const { start: faceStart, end: faceEnd } = getFaceSegment(
+				vertices,
+				faceIndex,
+			);
+			const face = faces[faceIndex];
 			const collisionEdge =
-				side === undefined
-					? getInsetEdge(sideStart, sideEnd, avatarRadiusWorld)
-					: segment(sideStart, sideEnd);
+				face === undefined
+					? getInsetEdge(faceStart, faceEnd, avatarRadiusWorld)
+					: segment(faceStart, faceEnd);
 			if (math.isClockwise3(collisionEdge.start, collisionEdge.end, next)) {
 				const { x: edgePosition, y: movePosition } = math.intersect(
 					collisionEdge.start,
@@ -94,7 +168,7 @@ export default class Physics {
 					movePosition > -epsilon &&
 					movePosition < 1 + epsilon
 				) {
-					if (!side) {
+					if (!face) {
 						// Reflect off solid walls by rewinding to the hit point first.
 						this.position = math.interpolate(
 							this.position,
@@ -114,18 +188,18 @@ export default class Physics {
 						const reflectedNext = math.add(reflectedDelta, this.position);
 						this.simulatePhysics(reflectedNext, wallCount + 1);
 					} else {
-						const { tileId, sideIndex: neighborSideIndex } = side;
-						const { shape: nextShape } = this.plan.get(tileId);
-						const from: ShapeSide = { shape, index: sideIndex };
-						const to: ShapeSide = {
+						const { cellId, faceIndex: neighborFaceIndex } = face;
+						const { shape: nextShape } = this.plan.get(cellId);
+						const from: ShapeFace = { shape, index: faceIndex };
+						const to: ShapeFace = {
 							shape: nextShape,
-							index: neighborSideIndex,
+							index: neighborFaceIndex,
 						};
 						// Seam crossings transport position, heading, and scale together.
 						this.position = math.interpolate(this.position, next, movePosition);
 						this.transport(from, to);
 						const shiftedNext = transitionPosition(next, from, to);
-						this.currentTileId = tileId;
+						this.currentCellId = cellId;
 						this.simulatePhysics(shiftedNext, wallCount);
 					}
 					return this.position;
@@ -140,28 +214,28 @@ export default class Physics {
 		if (depth > 8) {
 			return false;
 		}
-		const { shape, sides } = this.plan.get(this.currentTileId);
+		const { shape, faces } = this.plan.get(this.currentCellId);
 		// Clamp into the triangle's axis-aligned envelope first.
 		if (this.position.y < 0) this.position.y = 0;
 		if (this.position.y > shape.y) this.position.y = shape.y;
-		const min = (shape.x * this.position.y) / shape.y;
+		const [min, max] = getCellBounds(shape, this.position.y);
 		if (this.position.x < min) this.position.x = min;
-		const max = min + 1 - this.position.y / shape.y;
 		if (this.position.x > max) this.position.x = max;
 
 		const avatarRadiusWorld = this.avatarRadius / this.scale;
-		const corners = getTileCorners(shape);
+		const vertices = getCellVertices(shape);
 		// Push away from closed edges using inset collision lines.
-		for (let sideIndex = 0; sideIndex < 3; sideIndex++) {
-			if (sides[sideIndex] !== undefined) {
+		for (const faceIndex of triangleFaceIndices) {
+			if (faces[faceIndex] !== undefined) {
 				continue;
 			}
-			const [sideStartIndex, sideEndIndex] = getSideCorners(sideIndex);
-			const sideStart = corners[sideStartIndex];
-			const sideEnd = corners[sideEndIndex];
-			const inwardNormal = getInwardNormal(sideStart, sideEnd);
+			const { start: faceStart, end: faceEnd } = getFaceSegment(
+				vertices,
+				faceIndex,
+			);
+			const inwardNormal = getInwardNormal(faceStart, faceEnd);
 			const signedDistance = math.dot(
-				math.sub(this.position, sideStart),
+				math.sub(this.position, faceStart),
 				inwardNormal,
 			);
 			if (signedDistance < avatarRadiusWorld) {
@@ -171,38 +245,38 @@ export default class Physics {
 				);
 			}
 		}
-		// Resolve corner walls after the broad edge push to avoid tunneling into wedges.
-		const cornerWalls = ensureCornerWalls(this.plan, this.currentTileId);
-		for (let cornerIndex = 0; cornerIndex < 3; cornerIndex++) {
-			const cornerWall = cornerWalls[cornerIndex];
-			if (!cornerWall) {
+		// Resolve vertex walls after the broad edge push to avoid tunneling into wedges.
+		const vertexWalls = ensureVertexWalls(this.plan, this.currentCellId);
+		for (const vertexIndex of triangleVertexIndices) {
+			const vertexWall = vertexWalls[vertexIndex];
+			if (!vertexWall) {
 				continue;
 			}
-			const corner = corners[cornerIndex];
-			let delta = math.sub(this.position, corner);
+			const vertex = vertices[vertexIndex];
+			let delta = math.sub(this.position, vertex);
 			const distance = Math.sqrt(math.lengthSq(delta));
 			if (distance < epsilon) {
 				const outward = point(0.0, 1.0);
 				this.position = math.add(
-					corner,
+					vertex,
 					math.mul(outward, avatarRadiusWorld + epsilon),
 				);
 				continue;
 			}
 			if (distance < avatarRadiusWorld) {
 				this.position = math.add(
-					corner,
+					vertex,
 					math.mul(delta, (avatarRadiusWorld + epsilon) / distance),
 				);
-				delta = math.sub(this.position, corner);
+				delta = math.sub(this.position, vertex);
 			}
-			for (const wallDirection of [cornerWall.left, cornerWall.right]) {
+			for (const wallDirection of [vertexWall.left, vertexWall.right]) {
 				if (!wallDirection) {
 					continue;
 				}
-				const wallRayEnd = math.add(corner, wallDirection);
+				const wallRayEnd = math.add(vertex, wallDirection);
 				const wallDistanceSq = math.lineDistanceSq(
-					corner,
+					vertex,
 					wallRayEnd,
 					this.position,
 				);
@@ -213,7 +287,7 @@ export default class Physics {
 				) {
 					continue;
 				}
-				const inwardNormal = getInwardNormal(corner, wallRayEnd);
+				const inwardNormal = getInwardNormal(vertex, wallRayEnd);
 				const signedDistance = math.dot(delta, inwardNormal);
 				if (
 					signedDistance > -avatarRadiusWorld &&
@@ -221,38 +295,39 @@ export default class Physics {
 				) {
 					const push = avatarRadiusWorld - signedDistance + epsilon;
 					this.position = math.add(this.position, math.mul(inwardNormal, push));
-					delta = math.sub(this.position, corner);
+					delta = math.sub(this.position, vertex);
 				}
 			}
 		}
-		if (isInsideTile(this.position, shape)) {
+		if (isInsideCell(this.position, shape, epsilon)) {
 			return true;
 		}
-		// If we still ended up across a seam, transport into the neighboring tile and retry.
-		for (let sideIndex = 0; sideIndex < 3; sideIndex++) {
-			const side = sides[sideIndex];
-			if (!side) {
+		// If we still ended up across a seam, transport into the neighboring cell and retry.
+		for (const faceIndex of triangleFaceIndices) {
+			const face = faces[faceIndex];
+			if (!face) {
 				continue;
 			}
-			const { tileId, sideIndex: neighborSideIndex } = side;
-			const [sideStartIndex, sideEndIndex] = getSideCorners(sideIndex);
-			const sideStart = corners[sideStartIndex];
-			const sideEnd = corners[sideEndIndex];
-			if (!math.isClockwise3(sideStart, sideEnd, this.position)) {
+			const { cellId, faceIndex: neighborFaceIndex } = face;
+			const { start: faceStart, end: faceEnd } = getFaceSegment(
+				vertices,
+				faceIndex,
+			);
+			if (!math.isClockwise3(faceStart, faceEnd, this.position)) {
 				continue;
 			}
-			const { shape: nextShape } = this.plan.get(tileId);
-			const from: ShapeSide = { shape, index: sideIndex };
-			const to: ShapeSide = { shape: nextShape, index: neighborSideIndex };
+			const { shape: nextShape } = this.plan.get(cellId);
+			const from: ShapeFace = { shape, index: faceIndex };
+			const to: ShapeFace = { shape: nextShape, index: neighborFaceIndex };
 			this.transport(from, to);
-			this.currentTileId = tileId;
+			this.currentCellId = cellId;
 			return this.simulateSnap(depth + 1);
 		}
 		return false;
 	}
 
 	simulateMove(delta: Point): void {
-		const previousCurrentTileId = this.currentTileId;
+		const previousCurrentCellId = this.currentCellId;
 		const previousPosition = point(this.position.x, this.position.y);
 		const previousRotation = this.rotation;
 		const previousWorldRotation = this.worldRotation;
@@ -264,16 +339,16 @@ export default class Physics {
 		);
 		this.simulatePhysics(next);
 		if (!this.simulateSnap()) {
-			this.currentTileId = previousCurrentTileId;
-			this.position = previousPosition;
-			this.rotation = previousRotation;
-			this.worldRotation = previousWorldRotation;
-			this.scale = previousScale;
-			this.worldOffset = previousWorldOffset;
+			this.supportState.cellId = previousCurrentCellId;
+			this.supportState.position = previousPosition;
+			this.supportState.rotation = previousRotation;
+			this.cameraState.rotation = previousWorldRotation;
+			this.supportState.scale = previousScale;
+			this.cameraState.offset = previousWorldOffset;
 		}
 	}
 
 	simulateTurn(delta: number): void {
-		this.rotation += delta;
+		this.supportState.rotation += delta;
 	}
 }

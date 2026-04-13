@@ -1,6 +1,8 @@
 import assert from "./assert";
+import { TupleMap } from "./tuple";
 
-export type TileId = bigint;
+export type CellId = bigint;
+export type Triple<T> = [T, T, T];
 
 export interface Point {
 	x: number;
@@ -20,60 +22,91 @@ export interface Color {
 	a: number;
 }
 
-export interface Side {
-	tileId: TileId;
-	sideIndex: number;
+export interface Face {
+	cellId: CellId;
+	faceIndex: number;
 }
 
-export function side(tileId: TileId, sideIndex: number): Side {
-	assert(tileId >= 0n, "Invalid side tileId", tileId);
+export function face(cellId: CellId, faceIndex: number): Face {
+	assert(cellId >= 0n, "Invalid face cellId", cellId);
 	assert(
-		Number.isInteger(sideIndex) && sideIndex >= 0,
-		"Invalid side sideIndex",
-		sideIndex,
+		Number.isInteger(faceIndex) && faceIndex >= 0,
+		"Invalid face faceIndex",
+		faceIndex,
 	);
-	return { tileId, sideIndex };
+	return { cellId, faceIndex };
 }
 
-export interface Tile {
+export interface Cell {
 	shape: Point;
-	sides: [Side | undefined, Side | undefined, Side | undefined];
+	faces: Triple<Face | undefined>;
 }
 
-export interface ShapeSide {
+export interface ShapeFace {
 	shape: Point;
 	index: number;
 }
 
-export function tile(
+export function cell(
 	shape: Point,
-	a: Side | undefined,
-	b: Side | undefined,
-	c: Side | undefined,
-): Tile {
-	assert(Number.isFinite(shape.x), "Invalid tile shape x", shape.x);
-	assert(Number.isFinite(shape.y), "Invalid tile shape y", shape.y);
-	assert(shape.y > 0, "Tile shape y must be positive", shape.y);
-	return { shape, sides: [a, b, c] };
+	a: Face | undefined,
+	b: Face | undefined,
+	c: Face | undefined,
+): Cell {
+	assert(Number.isFinite(shape.x), "Invalid cell shape x", shape.x);
+	assert(Number.isFinite(shape.y), "Invalid cell shape y", shape.y);
+	assert(shape.y > 0, "Cell shape y must be positive", shape.y);
+	return { shape, faces: triple(a, b, c) };
+}
+
+export function triple(): Triple<undefined>;
+export function triple<T>(a: T, b: T, c: T): Triple<T>;
+export function triple<T>(a?: T, b?: T, c?: T): Triple<T | undefined> {
+	return [a, b, c];
+}
+
+export function mapTriple<T, U>(
+	values: Triple<T>,
+	mapper: (value: T, index: number) => U,
+): Triple<U> {
+	return triple(
+		mapper(values[0], 0),
+		mapper(values[1], 1),
+		mapper(values[2], 2),
+	);
 }
 
 export interface Plan {
 	slug: string;
-	get(id: TileId): Tile;
+	get(id: CellId): Cell;
 	deterministic: boolean;
-	cornerWallCache: Record<
-		string,
-		Record<number, Record<number, Point | null> | undefined> | undefined
-	>;
+	vertexWallCache: TupleMap<[CellId, number, number], Point | null>;
+}
+
+export interface SupportState {
+	cellId: CellId;
+	position: Point;
+	rotation: number;
+	scale: number;
+}
+
+export interface CameraState {
+	rotation: number;
+	offset: Point;
 }
 
 export function plan(
 	slug: string,
-	get: (id: TileId) => Tile,
+	get: (id: CellId) => Cell,
 	deterministic = true,
 ): Plan {
 	assert(slug.length > 0, "Plan slug must not be empty");
-	return { slug, get, deterministic, cornerWallCache: {} };
+	return {
+		slug,
+		get,
+		deterministic,
+		vertexWallCache: new TupleMap<[CellId, number, number], Point | null>(),
+	};
 }
 
 export interface Segment {
@@ -85,13 +118,27 @@ export function segment(start: Point, end: Point): Segment {
 	return { start, end };
 }
 
-export interface CornerWall {
+export interface Transform {
+	basisX: Point;
+	basisY: Point;
+	offset: Point;
+}
+
+export function transform(
+	basisX: Point,
+	basisY: Point,
+	offset: Point,
+): Transform {
+	return { basisX, basisY, offset };
+}
+
+export interface VertexWall {
 	left?: Point;
 	right?: Point;
 }
 
 export interface RenderStats {
-	tiles: number;
+	cells: number;
 	branches: number;
 	maxDepth: number;
 	duration: number;

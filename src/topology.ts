@@ -1,41 +1,37 @@
-import type { Point } from "./types";
-import { point } from "./types";
+export const triangleVertexIndices = [0, 1, 2] as const;
+export const triangleFaceIndices = [0, 1, 2] as const;
 
-export function getTileCorners(shape: Point): [Point, Point, Point] {
-	return [point(0.0, 0.0), shape, point(1.0, 0.0)];
+export function getIncidentFaces(vertexIndex: number): [number, number] {
+	return [vertexIndex, (vertexIndex + 1) % 3];
 }
 
-export function getIncidentSides(cornerIndex: number): [number, number] {
-	return [cornerIndex, (cornerIndex + 1) % 3];
+export function getFaceVertices(faceIndex: number): [number, number] {
+	return [(faceIndex + 2) % 3, faceIndex];
 }
 
-export function getSideCorners(sideIndex: number): [number, number] {
-	return [(sideIndex + 2) % 3, sideIndex];
+export function getFaceOppositeVertex(faceIndex: number): number {
+	return (faceIndex + 1) % 3;
 }
 
-export function getSideOppositeCorner(sideIndex: number): number {
-	return (sideIndex + 1) % 3;
-}
-
-export function getOtherIncidentSide(
-	cornerIndex: number,
-	sideIndex: number,
+export function getOtherIncidentFace(
+	vertexIndex: number,
+	faceIndex: number,
 ): number {
-	const [a, b] = getIncidentSides(cornerIndex);
-	return a === sideIndex ? b : a;
+	const [a, b] = getIncidentFaces(vertexIndex);
+	return a === faceIndex ? b : a;
 }
 
-export function getAdjacentSides(sideIndex: number): [number, number] {
-	return [(sideIndex + 1) % 3, (sideIndex + 2) % 3];
+export function getAdjacentFaces(faceIndex: number): [number, number] {
+	return [(faceIndex + 1) % 3, (faceIndex + 2) % 3];
 }
 
-export function getCornerAcrossSide(
-	cornerIndex: number,
-	sideIndex: number,
-	otherSideIndex: number,
+export function getVertexAcrossFace(
+	vertexIndex: number,
+	faceIndex: number,
+	otherFaceIndex: number,
 ): number {
-	const [startCornerIndex] = getSideCorners(sideIndex);
-	return cornerIndex === startCornerIndex
-		? otherSideIndex
-		: (otherSideIndex + 2) % 3;
+	const [startVertexIndex] = getFaceVertices(faceIndex);
+	return vertexIndex === startVertexIndex
+		? otherFaceIndex
+		: (otherFaceIndex + 2) % 3;
 }

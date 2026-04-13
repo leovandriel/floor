@@ -1,7 +1,7 @@
 import * as math from "./linalg";
 import type Physics from "./physics";
 import type Renderer from "./render";
-import type { Plan, Point, RenderMode, TileId, TopologyMode } from "./types";
+import type { CellId, Plan, Point, RenderMode, TopologyMode } from "./types";
 import { point } from "./types";
 import type View from "./view";
 
@@ -30,7 +30,7 @@ export type SetNumberCommand =
 export type ControlAction =
 	| { type: ControlCommand; deltaSeconds?: number }
 	| { type: "drag-mouse"; delta: Point }
-	| { type: "set-current"; value: TileId }
+	| { type: "set-current"; value: CellId }
 	| { type: SetNumberCommand; value: number }
 	| { type: "set-debug"; value: boolean }
 	| { type: "set-render-mode"; value: RenderMode }
@@ -163,7 +163,7 @@ export default class Control {
 	): ControlResult {
 		switch (command.type) {
 			case "set-current":
-				this.physics.currentTileId = command.value;
+				this.physics.currentCellId = command.value;
 				this.physics.simulateSnap();
 				this.physics.resetWorld();
 				return "render-and-sync";

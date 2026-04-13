@@ -2,7 +2,7 @@ import { rotateScale } from "./geometry";
 import type Physics from "./physics";
 import { getPlanBySlug } from "./plan";
 import type Renderer from "./render";
-import type { Plan, Point, RenderMode, TileId, TopologyMode } from "./types";
+import type { CellId, Plan, Point, RenderMode, TopologyMode } from "./types";
 import { point, renderModes, topologyModes } from "./types";
 import type View from "./view";
 
@@ -22,7 +22,7 @@ export interface UrlQueryState {
 
 export interface UrlPathState {
 	slug: string;
-	current: TileId;
+	current: CellId;
 }
 
 export interface UrlState {
@@ -177,7 +177,7 @@ export function parsePlanSlug(pathname: string): string | undefined {
 	return pathname.split("/").filter(Boolean)[0];
 }
 
-function parsePathTileId(pathname: string): TileId | undefined {
+function parsePathCellId(pathname: string): CellId | undefined {
 	const value = pathname.split("/").filter(Boolean)[1];
 	return value && /^\d+$/.test(value) ? BigInt(value) : undefined;
 }
@@ -187,7 +187,7 @@ export function readUrlPathState(
 ): UrlPathState {
 	return {
 		slug: parsePlanSlug(pathname) ?? defaultPlanSlug,
-		current: parsePathTileId(pathname) ?? defaultUrlState.path.current,
+		current: parsePathCellId(pathname) ?? defaultUrlState.path.current,
 	};
 }
 
@@ -359,7 +359,7 @@ export class UrlStateTracker {
 		return {
 			path: {
 				slug: this.plan.slug,
-				current: this.physics.currentTileId,
+				current: this.physics.currentCellId,
 			},
 			query: {
 				x: this.physics.position.x,

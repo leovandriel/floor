@@ -298,11 +298,11 @@ export default class App {
 			this.topologyMode = state.query.topologyMode;
 			this.initializeState();
 		}
-		this.physics.currentTileId = this.getCurrentTileId(state.path.current);
+		this.physics.currentCellId = this.getCurrentCellId(state.path.current);
 		this.urlState.applyQueryState(state.query);
 	}
 
-	private getCurrentTileId(id: bigint): bigint {
+	private getCurrentCellId(id: bigint): bigint {
 		if (!this.plan.deterministic) {
 			return 0n;
 		}

@@ -68,7 +68,7 @@ function createAppHarness() {
 	app.renderer = {
 		render() {
 			return {
-				tiles: 0,
+				cells: 0,
 				branches: 0,
 				maxDepth: 0,
 				duration: 0,
@@ -143,7 +143,7 @@ test("handleMouse clears stale drag state when buttons are released", () => {
 	assert.equal(moves.length, 0);
 });
 
-test("handleMouse emits drag-mouse even when a corner is hovered", () => {
+test("handleMouse emits drag-mouse even when a vertex is hovered", () => {
 	const commands: unknown[] = [];
 	const input = new Input(
 		{
@@ -151,9 +151,9 @@ test("handleMouse emits drag-mouse even when a corner is hovered", () => {
 			scale: 1,
 		} as never,
 		{
-			hoveredCorner: {
-				tileIndex: 3,
-				cornerIndex: 1,
+			hoveredVertex: {
+				cellIndex: 3,
+				vertexIndex: 1,
 			},
 		} as never,
 		(command) => commands.push(command),

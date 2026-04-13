@@ -66,7 +66,7 @@ export default class UI {
 	private debugInput!: HTMLInputElement;
 	private renderModeInput!: HTMLSelectElement;
 	private topologyModeInput!: HTMLSelectElement;
-	private tilesOutput!: HTMLInputElement;
+	private cellsOutput!: HTMLInputElement;
 	private depthOutput!: HTMLInputElement;
 	private branchesOutput!: HTMLInputElement;
 	private fpsOutput!: HTMLInputElement;
@@ -95,7 +95,7 @@ export default class UI {
 			"topology-mode",
 			HTMLSelectElement,
 		);
-		this.tilesOutput = getRequiredElement("stats-tiles", HTMLInputElement);
+		this.cellsOutput = getRequiredElement("stats-cells", HTMLInputElement);
 		this.depthOutput = getRequiredElement("stats-depth", HTMLInputElement);
 		this.branchesOutput = getRequiredElement(
 			"stats-branches",
@@ -122,7 +122,7 @@ export default class UI {
 		stats: RenderStats | undefined,
 	): void {
 		this.planSelect.value = plan.slug;
-		this.currentInput.value = String(physics.currentTileId);
+		this.currentInput.value = String(physics.currentCellId);
 		this.currentInput.removeAttribute("max");
 		this.xInput.value = formatStateNumber(physics.position.x);
 		this.yInput.value = formatStateNumber(physics.position.y);
@@ -136,7 +136,7 @@ export default class UI {
 		for (const option of this.renderModeInput.options) {
 			option.disabled = option.value !== "canvas" && !renderer.webglAvailable;
 		}
-		this.tilesOutput.value = String(stats?.tiles ?? 0);
+		this.cellsOutput.value = String(stats?.cells ?? 0);
 		this.depthOutput.value = String(stats?.maxDepth ?? 0);
 		this.branchesOutput.value = String(stats?.branches ?? 0);
 		this.fpsOutput.value =

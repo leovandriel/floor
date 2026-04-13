@@ -5,14 +5,13 @@ import {
 	dot,
 	lengthSq,
 	mul,
-	neg,
 	normSq,
 	rotateRight,
 	sub,
 } from "./linalg";
-import { getSideCorners, getTileCorners } from "./topology";
-import type { Point, Segment, ShapeSide } from "./types";
-import { point } from "./types";
+import { getFaceVertices } from "./topology";
+import type { Point, Segment, ShapeFace, Transform, Triple } from "./types";
+import { point, segment, transform, triple } from "./types";
 
 export function dotCross(a: Point, b: Point): Point {
 	return point(dot(a, b), cross(a, b));
@@ -42,14 +41,81 @@ export function rotateScale(
 	return mul(dotCross(anglePoint(rotation), position), scale);
 }
 
-export function shiftCorner(p: Point, q: Point, shape: Point): Point {
-	return add(p, dotCross(reflectY(shape), sub(q, p)));
+export function applyTransformPoint(value: Transform, position: Point): Point {
+	return add(applyTransformVector(value, position), value.offset);
 }
 
-export function shiftPosition(
-	position: Point,
-	{ shape, index }: ShapeSide,
+export function applyTransformVector(
+	value: Transform,
+	direction: Point,
 ): Point {
+	return add(mul(value.basisX, direction.x), mul(value.basisY, direction.y));
+}
+
+export function projectPoint(edge: Segment, position: Point): Point {
+	return add(
+		edge.start,
+		dotCross(reflectY(position), sub(edge.end, edge.start)),
+	);
+}
+
+export function getCellVertices(shape: Point): [Point, Point, Point] {
+	return [point(0.0, 0.0), shape, point(1.0, 0.0)];
+}
+
+export function getCellBounds(shape: Point, y: number): [number, number] {
+	const min = (shape.x * y) / shape.y;
+	return [min, min + 1 - y / shape.y];
+}
+
+export function getFaceSegment(
+	vertices: Triple<Point>,
+	faceIndex: number,
+): Segment {
+	const [startVertexIndex, endVertexIndex] = getFaceVertices(faceIndex);
+	return segment(vertices[startVertexIndex], vertices[endVertexIndex]);
+}
+
+export function isInsideCell(
+	position: Point,
+	shape: Point,
+	tolerance = 0,
+): boolean {
+	if (position.y < -tolerance || position.y > shape.y + tolerance) {
+		return false;
+	}
+	const [min, max] = getCellBounds(shape, position.y);
+	return position.x >= min - tolerance && position.x <= max + tolerance;
+}
+
+export function projectTriangle(edge: Segment, shape: Point): Triple<Point> {
+	return triple(edge.start, projectPoint(edge, shape), edge.end);
+}
+
+export function projectVertexOffset(
+	edge: Segment,
+	vertex: Point,
+	offset: Point,
+): Point {
+	return projectPoint(edge, add(vertex, offset));
+}
+
+export function projectViewTriangle(
+	shape: Point,
+	position: Point,
+	rotation: number,
+	scale: number,
+): Triple<Point> {
+	const leftVertex = rotateScale(position, rotation, scale);
+	const rightVertex = rotateScale(
+		point(position.x - 1, position.y),
+		rotation,
+		scale,
+	);
+	return projectTriangle(segment(leftVertex, rightVertex), shape);
+}
+
+export function shiftSeam(position: Point, { shape, index }: ShapeFace): Point {
 	switch (index) {
 		case 0:
 			return position;
@@ -61,9 +127,9 @@ export function shiftPosition(
 	return position;
 }
 
-export function unshiftPosition(
+export function unshiftSeam(
 	position: Point,
-	{ shape, index }: ShapeSide,
+	{ shape, index }: ShapeFace,
 ): Point {
 	switch (index) {
 		case 0:
@@ -76,54 +142,49 @@ export function unshiftPosition(
 	return position;
 }
 
-export function transitionPosition(
-	position: Point,
-	from: ShapeSide,
-	to: ShapeSide,
-): Point {
-	return unshiftPosition(
-		reflectY(reflect1X(shiftPosition(position, from))),
-		to,
+function transformSeam(position: Point, from: ShapeFace, to: ShapeFace): Point {
+	return unshiftSeam(reflectY(reflect1X(shiftSeam(position, from))), to);
+}
+
+export function getSeamTransform(from: ShapeFace, to: ShapeFace): Transform {
+	const offset = transformSeam(point(0.0, 0.0), from, to);
+	return transform(
+		sub(transformSeam(point(1.0, 0.0), from, to), offset),
+		sub(transformSeam(point(0.0, 1.0), from, to), offset),
+		offset,
 	);
 }
 
-function shiftDirection(direction: Point, { shape, index }: ShapeSide): Point {
-	switch (index) {
-		case 0:
-			return direction;
-		case 1:
-			return neg(dotCross(normSq(shape), direction));
-		case 2:
-			return neg(dotCross(reflectY(direction), normSq(reflect1X(shape))));
-	}
-	return direction;
-}
-
-function unshiftDirection(
-	direction: Point,
-	{ shape, index }: ShapeSide,
+export function transitionPosition(
+	position: Point,
+	from: ShapeFace,
+	to: ShapeFace,
 ): Point {
-	switch (index) {
-		case 0:
-			return direction;
-		case 1:
-			return neg(dotCross(reflectY(direction), shape));
-		case 2:
-			return neg(dotCross(reflect1X(shape), direction));
-	}
-	return direction;
+	return applyTransformPoint(getSeamTransform(from, to), position);
 }
 
 export function transitionDirection(
 	direction: Point,
-	from: ShapeSide,
-	to: ShapeSide,
+	from: ShapeFace,
+	to: ShapeFace,
 ): Point {
-	return unshiftDirection(neg(shiftDirection(direction, from)), to);
+	return applyTransformVector(getSeamTransform(from, to), direction);
 }
 
-export function shiftShape(shape: Point, sideIndex: number): Point {
-	switch (sideIndex) {
+export function transitionScale(from: ShapeFace, to: ShapeFace): number {
+	return Math.sqrt(
+		lengthSq(applyTransformVector(getSeamTransform(to, from), point(1.0, 0.0))),
+	);
+}
+
+export function transitionRotation(from: ShapeFace, to: ShapeFace): number {
+	return pointAngle(
+		applyTransformVector(getSeamTransform(to, from), point(1.0, 0.0)),
+	);
+}
+
+export function seamShape(shape: Point, faceIndex: number): Point {
+	switch (faceIndex) {
 		case 0:
 			return shape;
 		case 1:
@@ -134,76 +195,54 @@ export function shiftShape(shape: Point, sideIndex: number): Point {
 	return shape;
 }
 
-export function shiftScale({ shape, index }: ShapeSide): number {
-	switch (index) {
-		case 0:
-			return 1;
-		case 1:
-			return Math.sqrt(lengthSq(shape));
-		case 2:
-			return Math.sqrt(lengthSq(reflect1X(shape)));
-	}
-	return 1;
+export function projectSeamTriangle(
+	edge: Segment,
+	shape: Point,
+	faceIndex: number,
+): Triple<Point> {
+	return projectTriangle(edge, seamShape(shape, faceIndex));
 }
 
-export function transitionScale(from: ShapeSide, to: ShapeSide): number {
-	return shiftScale(from) / shiftScale(to);
+export function projectBranchTriangles(
+	screenEdge: Segment,
+	worldEdge: Segment,
+	shape: Point,
+	faceIndex: number,
+): [Triple<Point>, Triple<Point>] {
+	return [
+		projectSeamTriangle(screenEdge, shape, faceIndex),
+		projectSeamTriangle(worldEdge, shape, faceIndex),
+	];
 }
 
-export function shiftRotation(side: ShapeSide): number {
-	switch (side.index) {
-		case 0:
-			return 0;
-		case 1:
-			return pointAngle(side.shape) - 0.5;
-		case 2:
-			return -pointAngle(reflect1X(side.shape)) + 0.5;
-	}
-	return 0;
-}
-
-export function unshiftRotation(side: ShapeSide): number {
-	switch (side.index) {
-		case 0:
-			return 0;
-		case 1:
-			return -pointAngle(side.shape) + 0.5;
-		case 2:
-			return pointAngle(reflect1X(side.shape)) - 0.5;
-	}
-	return 0;
-}
-
-export function transitionRotation(from: ShapeSide, to: ShapeSide): number {
-	return shiftRotation(from) + unshiftRotation(to) + 0.5;
-}
-
-export function getInwardNormal(sideStart: Point, sideEnd: Point): Point {
-	const edge = sub(sideEnd, sideStart);
+export function getInwardNormal(faceStart: Point, faceEnd: Point): Point {
+	const edge = sub(faceEnd, faceStart);
 	return rotateRight(div(edge, Math.sqrt(lengthSq(edge))));
 }
 
 export function getInsetEdge(
-	sideStart: Point,
-	sideEnd: Point,
+	faceStart: Point,
+	faceEnd: Point,
 	inset: number,
 ): Segment {
-	const insetDelta = mul(getInwardNormal(sideStart, sideEnd), inset);
+	const insetDelta = mul(getInwardNormal(faceStart, faceEnd), inset);
 	return {
-		start: add(sideStart, insetDelta),
-		end: add(sideEnd, insetDelta),
+		start: add(faceStart, insetDelta),
+		end: add(faceEnd, insetDelta),
 	};
 }
 
-export function getSideDirectionAtCorner(
+export function getFaceDirectionAtVertex(
 	shape: Point,
-	sideIndex: number,
-	cornerIndex: number,
+	faceIndex: number,
+	vertexIndex: number,
 ): Point {
-	const corners = getTileCorners(shape);
-	const [sideStartIndex, sideEndIndex] = getSideCorners(sideIndex);
-	const sideStart = corners[sideStartIndex];
-	const sideEnd = corners[sideEndIndex];
-	const otherCorner = cornerIndex === sideStartIndex ? sideEnd : sideStart;
-	return sub(otherCorner, corners[cornerIndex]);
+	const vertices = getCellVertices(shape);
+	const { start: faceStart, end: faceEnd } = getFaceSegment(
+		vertices,
+		faceIndex,
+	);
+	const [faceStartIndex] = getFaceVertices(faceIndex);
+	const otherVertex = vertexIndex === faceStartIndex ? faceEnd : faceStart;
+	return sub(otherVertex, vertices[vertexIndex]);
 }

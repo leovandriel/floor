@@ -5,7 +5,7 @@ import { getWallColor, type RenderBatch } from "./render";
 import { type Color, type Point, renderModes } from "./types";
 import type View from "./view";
 
-const tileVertexSource = `#version 300 es
+const cellVertexSource = `#version 300 es
 in vec2 a_position;
 in vec2 a_world;
 in vec4 a_color;
@@ -22,7 +22,7 @@ void main() {
 }
 `;
 
-const tileFragmentSource = `#version 300 es
+const cellFragmentSource = `#version 300 es
 precision highp float;
 
 in vec2 v_world;
@@ -394,7 +394,7 @@ function pushWallPolygon(
 	}
 }
 
-function pushTileTriangle(
+function pushCellTriangle(
 	buffer: number[],
 	a: Point,
 	b: Point,
@@ -429,7 +429,7 @@ function getWorldPoint(
 	);
 }
 
-function pushTilePolygon(
+function pushCellPolygon(
 	buffer: number[],
 	polygon: Point[],
 	start: Point,
@@ -439,7 +439,7 @@ function pushTilePolygon(
 	color: Color,
 ): void {
 	for (let index = 1; index < polygon.length - 1; index++) {
-		pushTileTriangle(
+		pushCellTriangle(
 			buffer,
 			polygon[0],
 			polygon[index],
@@ -472,12 +472,12 @@ function pushCircleQuad(
 
 export default class WebGLRenderer {
 	private readonly gl: WebGL2RenderingContext;
-	private readonly tileProgram: WebGLProgram;
+	private readonly cellProgram: WebGLProgram;
 	private readonly wallProgram: WebGLProgram;
 	private readonly avatarProgram: WebGLProgram;
-	private readonly tilePositionLocation: number;
-	private readonly tileWorldLocation: number;
-	private readonly tileColorLocation: number;
+	private readonly cellPositionLocation: number;
+	private readonly cellWorldLocation: number;
+	private readonly cellColorLocation: number;
 	private readonly wallPositionLocation: number;
 	private readonly wallStartLocation: number;
 	private readonly wallEndLocation: number;
@@ -488,25 +488,25 @@ export default class WebGLRenderer {
 	private readonly avatarPositionLocation: number;
 	private readonly avatarUvLocation: number;
 	private readonly avatarColorLocation: number;
-	private readonly tileScaleLocation: WebGLUniformLocation;
-	private readonly tileModeLocation: WebGLUniformLocation;
-	private readonly tileLightLocation: WebGLUniformLocation;
+	private readonly cellScaleLocation: WebGLUniformLocation;
+	private readonly cellModeLocation: WebGLUniformLocation;
+	private readonly cellLightLocation: WebGLUniformLocation;
 	private readonly wallScaleLocation: WebGLUniformLocation;
 	private readonly wallModeLocation: WebGLUniformLocation;
 	private readonly wallLightLocation: WebGLUniformLocation;
 	private readonly wallHeightLocation: WebGLUniformLocation;
 	private readonly avatarScaleLocation: WebGLUniformLocation;
-	private readonly tileVertexBuffer: WebGLBuffer;
+	private readonly cellVertexBuffer: WebGLBuffer;
 	private readonly wallVertexBuffer: WebGLBuffer;
 	private readonly avatarVertexBuffer: WebGLBuffer;
 	private scale = { x: 1, y: 1 };
 
 	constructor(context: WebGL2RenderingContext) {
 		this.gl = context;
-		this.tileProgram = createProgram(
+		this.cellProgram = createProgram(
 			context,
-			tileVertexSource,
-			tileFragmentSource,
+			cellVertexSource,
+			cellFragmentSource,
 		);
 		this.wallProgram = createProgram(
 			context,
@@ -518,16 +518,16 @@ export default class WebGLRenderer {
 			avatarVertexSource,
 			avatarFragmentSource,
 		);
-		this.tilePositionLocation = context.getAttribLocation(
-			this.tileProgram,
+		this.cellPositionLocation = context.getAttribLocation(
+			this.cellProgram,
 			"a_position",
 		);
-		this.tileWorldLocation = context.getAttribLocation(
-			this.tileProgram,
+		this.cellWorldLocation = context.getAttribLocation(
+			this.cellProgram,
 			"a_world",
 		);
-		this.tileColorLocation = context.getAttribLocation(
-			this.tileProgram,
+		this.cellColorLocation = context.getAttribLocation(
+			this.cellProgram,
 			"a_color",
 		);
 		this.wallPositionLocation = context.getAttribLocation(
@@ -567,30 +567,30 @@ export default class WebGLRenderer {
 			this.avatarProgram,
 			"a_color",
 		);
-		const tileScaleLocation = context.getUniformLocation(
-			this.tileProgram,
+		const cellScaleLocation = context.getUniformLocation(
+			this.cellProgram,
 			"u_scale",
 		);
-		if (!tileScaleLocation) {
-			throw new Error("Failed to find tile scale uniform");
+		if (!cellScaleLocation) {
+			throw new Error("Failed to find cell scale uniform");
 		}
-		this.tileScaleLocation = tileScaleLocation;
-		const tileModeLocation = context.getUniformLocation(
-			this.tileProgram,
+		this.cellScaleLocation = cellScaleLocation;
+		const cellModeLocation = context.getUniformLocation(
+			this.cellProgram,
 			"u_mode",
 		);
-		if (!tileModeLocation) {
-			throw new Error("Failed to find tile mode uniform");
+		if (!cellModeLocation) {
+			throw new Error("Failed to find cell mode uniform");
 		}
-		this.tileModeLocation = tileModeLocation;
-		const tileLightLocation = context.getUniformLocation(
-			this.tileProgram,
+		this.cellModeLocation = cellModeLocation;
+		const cellLightLocation = context.getUniformLocation(
+			this.cellProgram,
 			"u_light",
 		);
-		if (!tileLightLocation) {
-			throw new Error("Failed to find tile light uniform");
+		if (!cellLightLocation) {
+			throw new Error("Failed to find cell light uniform");
 		}
-		this.tileLightLocation = tileLightLocation;
+		this.cellLightLocation = cellLightLocation;
 		const wallScaleLocation = context.getUniformLocation(
 			this.wallProgram,
 			"u_scale",
@@ -631,11 +631,11 @@ export default class WebGLRenderer {
 			throw new Error("Failed to find avatar scale uniform");
 		}
 		this.avatarScaleLocation = avatarScaleLocation;
-		const tileVertexBuffer = context.createBuffer();
-		if (!tileVertexBuffer) {
-			throw new Error("Failed to create tile vertex buffer");
+		const cellVertexBuffer = context.createBuffer();
+		if (!cellVertexBuffer) {
+			throw new Error("Failed to create cell vertex buffer");
 		}
-		this.tileVertexBuffer = tileVertexBuffer;
+		this.cellVertexBuffer = cellVertexBuffer;
 		const wallVertexBuffer = context.createBuffer();
 		if (!wallVertexBuffer) {
 			throw new Error("Failed to create wall vertex buffer");
@@ -664,18 +664,18 @@ export default class WebGLRenderer {
 	draw(batch: RenderBatch, renderer: Renderer, view: View): void {
 		const mode = renderModes.indexOf(renderer.renderMode) - 1;
 		const light = renderer.avatarWorldPosition;
-		const tileVertices: number[] = [];
+		const cellVertices: number[] = [];
 		const wallVertices: number[] = [];
 		const avatarVertices: number[] = [];
-		for (const tile of batch.tiles) {
-			pushTilePolygon(
-				tileVertices,
-				tile.polygon,
-				tile.start,
-				tile.end,
-				tile.worldStart,
-				tile.worldEnd,
-				tile.color,
+		for (const cell of batch.cells) {
+			pushCellPolygon(
+				cellVertices,
+				cell.polygon,
+				cell.start,
+				cell.end,
+				cell.worldStart,
+				cell.worldEnd,
+				cell.color,
 			);
 		}
 		for (const wall of batch.walls) {
@@ -694,48 +694,48 @@ export default class WebGLRenderer {
 			);
 		}
 
-		this.gl.useProgram(this.tileProgram);
+		this.gl.useProgram(this.cellProgram);
 		this.gl.uniform2f(
-			this.tileScaleLocation,
+			this.cellScaleLocation,
 			this.scale.x * view.factor,
 			this.scale.y * view.factor,
 		);
-		this.gl.uniform1i(this.tileModeLocation, mode);
-		this.gl.uniform2f(this.tileLightLocation, light.x, light.y);
-		this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.tileVertexBuffer);
+		this.gl.uniform1i(this.cellModeLocation, mode);
+		this.gl.uniform2f(this.cellLightLocation, light.x, light.y);
+		this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.cellVertexBuffer);
 		this.gl.bufferData(
 			this.gl.ARRAY_BUFFER,
-			new Float32Array(tileVertices),
+			new Float32Array(cellVertices),
 			this.gl.DYNAMIC_DRAW,
 		);
-		this.gl.enableVertexAttribArray(this.tilePositionLocation);
+		this.gl.enableVertexAttribArray(this.cellPositionLocation);
 		this.gl.vertexAttribPointer(
-			this.tilePositionLocation,
+			this.cellPositionLocation,
 			2,
 			this.gl.FLOAT,
 			false,
 			8 * Float32Array.BYTES_PER_ELEMENT,
 			0,
 		);
-		this.gl.enableVertexAttribArray(this.tileWorldLocation);
+		this.gl.enableVertexAttribArray(this.cellWorldLocation);
 		this.gl.vertexAttribPointer(
-			this.tileWorldLocation,
+			this.cellWorldLocation,
 			2,
 			this.gl.FLOAT,
 			false,
 			8 * Float32Array.BYTES_PER_ELEMENT,
 			2 * Float32Array.BYTES_PER_ELEMENT,
 		);
-		this.gl.enableVertexAttribArray(this.tileColorLocation);
+		this.gl.enableVertexAttribArray(this.cellColorLocation);
 		this.gl.vertexAttribPointer(
-			this.tileColorLocation,
+			this.cellColorLocation,
 			4,
 			this.gl.FLOAT,
 			false,
 			8 * Float32Array.BYTES_PER_ELEMENT,
 			4 * Float32Array.BYTES_PER_ELEMENT,
 		);
-		this.gl.drawArrays(this.gl.TRIANGLES, 0, tileVertices.length / 8);
+		this.gl.drawArrays(this.gl.TRIANGLES, 0, cellVertices.length / 8);
 
 		this.gl.useProgram(this.wallProgram);
 		this.gl.uniform2f(
